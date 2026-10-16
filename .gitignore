@@ -1,0 +1,26 @@
+# ---- secrets: never commit ----
+config.local.json
+*.test-bak
+
+# ---- dependencies / build output ----
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+*.pyc
+
+# ---- test output ----
+dev/test/artifacts/
+
+# ---- packaged releases ----
+*.zip
+*.crx
+*.pem
+
+# ---- editors / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,56 @@
+name: checks
+
+# Lightweight, browser-free checks. The full end-to-end suite (dev/test/smoke.mjs)
+# needs a real Chromium with the unpacked extension loaded, so it runs locally:
+#   cd dev && pnpm install && node test/smoke.mjs
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax check all extension scripts
+        run: |
+          set -e
+          for f in src/background.js src/viewer.js; do
+            cp "$f" "/tmp/$(basename "$f").mjs"
+            node --check "/tmp/$(basename "$f").mjs"
+            echo "ok (esm) $f"
+          done
+          for f in src/content.js src/popup.js src/options.js; do
+            node --check "$f"
+            echo "ok (script) $f"
+          done
+
+      - name: Validate manifest.json
+        run: |
+          node -e "const m=require('./manifest.json');
+            if(m.manifest_version!==3) throw new Error('manifest_version must be 3');
+            for (const k of ['name','version','background','content_scripts','icons']) if(!m[k]) throw new Error('missing '+k);
+            console.log('manifest ok:', m.name, m.version);"
+
+      - name: Fail if secrets or local config slipped in
+        run: |
+          set -e
+          if git ls-files | grep -q 'config.local.json'; then
+            echo 'config.local.json must never be committed'; exit 1
+          fi
+          if git grep -n -I -E 'sk-[A-Za-z0-9]{16,}' -- . ':!config.local.example.json'; then
+            echo 'looks like an API key is committed'; exit 1
+          fi
+          echo 'no secrets found'
+
+      - name: Python tool syntax
+        run: |
+          python3 -m compileall -q dev/tools && echo 'python tools ok'

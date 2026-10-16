@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>PDF 划词翻译 · 设置</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <h1><span class="brand">译</span> PDF 划词翻译 · 设置</h1>
+
+      <section class="card">
+        <h2>翻译引擎</h2>
+        <div class="grid">
+          <label>
+            <span>目标语言</span>
+            <select id="targetLang">
+              <option value="zh-CN">简体中文</option>
+              <option value="zh-TW">繁體中文</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+              <option value="ru">Русский</option>
+            </select>
+          </label>
+          <label>
+            <span>源语言</span>
+            <select id="sourceLang">
+              <option value="auto">自动检测</option>
+              <option value="en">English</option>
+              <option value="zh-CN">简体中文</option>
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+            </select>
+          </label>
+          <label>
+            <span>引擎</span>
+            <select id="engine">
+              <option value="auto">自动（依次尝试）</option>
+              <option value="google">Google 免费接口</option>
+              <option value="microsoft">Microsoft 免费接口</option>
+              <option value="youdao">有道演示接口（免费）</option>
+              <option value="mymemory">MyMemory（免费）</option>
+              <option value="custom">自定义 OpenAI 兼容 API</option>
+            </select>
+          </label>
+        </div>
+        <p class="muted small">
+          「自动」= 配了自定义 API 就优先用它，否则依次尝试 Google → Microsoft。
+          免费接口无需 Key，但在部分网络环境（例如中国大陆直连 Google）可能不可达；
+          此时建议配置 DeepSeek 等 OpenAI 兼容接口。
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>自定义 OpenAI 兼容 API</h2>
+        <div class="grid">
+          <label class="wide">
+            <span>接口地址（Base URL）</span>
+            <input id="customBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" />
+          </label>
+          <label class="wide">
+            <span>API Key</span>
+            <input id="customApiKey" type="password" placeholder="sk-..." autocomplete="off" />
+          </label>
+          <label>
+            <span>模型</span>
+            <input id="customModel" type="text" placeholder="deepseek-chat" list="modelSuggestions" />
+            <datalist id="modelSuggestions">
+              <option value="deepseek-chat">推荐：不带思考，首字约 0.4 秒</option>
+              <option value="deepseek-reasoner">带思考，明显更慢</option>
+              <option value="deepseek-flash">实测比 deepseek-chat 慢很多，不推荐</option>
+            </datalist>
+          </label>
+          <label>
+            <span>思考模式（影响速度）</span>
+            <select id="thinkingPreset">
+              <option value="">保持默认（不改请求）</option>
+              <option value='{"enable_thinking":false}'>关闭思考 · 通义/Qwen 等</option>
+              <option value='{"reasoning_effort":"low"}'>思考强度最低 · OpenAI 兼容</option>
+              <option value='{"thinking":{"type":"disabled"}}'>关闭思考 · 部分网关</option>
+            </select>
+          </label>
+        </div>
+        <p id="keySource" class="muted small" hidden></p>
+        <p id="modelHint" class="muted small" hidden></p>
+        <label class="wide block">
+          <span>额外请求参数（JSON，会合并进请求体）</span>
+          <textarea id="customExtraBody" rows="2" placeholder='例如 {"enable_thinking": false}'></textarea>
+        </label>
+        <p class="muted small">
+          <strong>速度提示：</strong>DeepSeek 的思考版是 <code>deepseek-reasoner</code>，出结果明显更慢；
+          翻译用 <code>deepseek-chat</code> 就行（实测约 1~2 秒/句）。
+          其它模型若默认带思考，用上面的预设关掉或调低即可。
+        </p>
+        <label class="wide block">
+          <span>系统提示词（<code>{target}</code> 会替换成目标语言）</span>
+          <textarea id="customPrompt" rows="3"></textarea>
+        </label>
+        <div class="row">
+          <button id="save" class="primary">保存</button>
+          <button id="test">测试翻译</button>
+          <button id="speedTest" title="并发测一遍所有可用引擎，把最快的设为固定引擎（以后不再逐个试探）">⚡ 测速并选用最快引擎</button>
+          <span id="testResult" class="muted small"></span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>交互</h2>
+        <label class="check"><input type="checkbox" id="autoTranslate" /> 选中后立即翻译（关闭则先显示「译」小按钮）</label>
+        <label class="check"><input type="checkbox" id="fastFirst" /> 「先秒出、再升级」：免费引擎先出译文（约 0.2 秒），随后用自定义 API 的结果自动替换</label>
+        <label class="check"><input type="checkbox" id="sentenceMode" /> 自动把划选片段扩展到完整句子</label>
+        <label class="check"><input type="checkbox" id="autoOpenPdf" /> 点击 .pdf 链接时自动用自带阅读器打开</label>
+        <label class="check"><input type="checkbox" id="clipboardWatch" /> 在 Chrome/Edge 内置 PDF 阅读器里监听剪贴板（Ctrl+C 后自动翻译）</label>
+        <label class="inline">
+          <span>译文卡片字号</span>
+          <input id="cardFontSize" type="number" min="11" max="24" step="1" />
+          px
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>快捷键</h2>
+        <p class="muted small" id="shortcutList">读取中…</p>
+        <p class="muted small">
+          修改快捷键请打开 <code>chrome://extensions/shortcuts</code>（Edge 为 <code>edge://extensions/shortcuts</code>）。
+          在内置 PDF 阅读器里只有快捷键能触发翻译，右键菜单不会出现。
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>怎么用（推荐流程）</h2>
+        <ol class="small">
+          <li>在网页上打开 PDF → 点扩展图标 →「用翻译阅读器打开本 PDF」。</li>
+          <li>在自带阅读器里直接用鼠标划选句子，松手即出译文；可开启「整句」自动补全句子边界。</li>
+          <li>本地文件：把 PDF 拖进阅读器窗口，或点「打开本地 PDF」。本地文件不受跨域限制，最稳。</li>
+          <li>也可以在任何普通网页上划词翻译（同一套引擎与设置）。</li>
+        </ol>
+        <p class="muted small">
+          为什么需要自带阅读器？Chrome/Edge 内置的 PDF 阅读器由插件渲染，网页脚本拿不到选区、
+          也收不到鼠标事件，扩展只能靠快捷键 + 剪贴板间接工作。自带阅读器基于本地打包的 pdf.js，
+          文字层完全可访问，才能真正「选中即翻译」。
+        </p>
+      </section>
+
+      <p id="status" class="status muted small"></p>
+    </div>
+    <script src="options.js"></script>
+  </body>
+</html>

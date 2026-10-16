@@ -1,0 +1,16 @@
+# Keep line endings sane across Windows/macOS/Linux
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets
+*.png binary
+*.ico binary
+*.pdf binary
+*.bcmap binary
+*.pfb binary
+*.ttf binary
+*.zip binary
+
+# pdf.js bundle: don't let GitHub treat it as generated vendor noise
+vendor/* linguist-vendored

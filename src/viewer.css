@@ -1,0 +1,402 @@
+:root {
+  --bg: #f2f3f5;
+  --panel: #ffffff;
+  --panel-2: #f6f8fa;
+  --border: #d8dee4;
+  --text: #1f2328;
+  --muted: #6e7781;
+  --accent: #1f6feb;
+  --accent-soft: #ddebff;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16191d;
+    --panel: #1c2128;
+    --panel-2: #22272e;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #4184e4;
+    --accent-soft: #1b3a63;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 13px/1.5 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------- toolbar */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  z-index: 20;
+  flex: 0 0 auto;
+}
+
+.tb-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tb-right {
+  margin-left: auto;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.docname {
+  max-width: 26vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+button,
+.btn-link {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 9px;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: 1.6;
+}
+
+button:hover,
+.btn-link:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button.icon {
+  min-width: 26px;
+  padding: 3px 6px;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+button.primary:hover {
+  color: #fff;
+  filter: brightness(1.08);
+}
+
+.page-input {
+  width: 46px;
+  text-align: center;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 4px;
+}
+
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 4px;
+  max-width: 130px;
+}
+
+label.field,
+label.chk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+label.chk {
+  cursor: pointer;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12px;
+}
+
+.zoom-label {
+  min-width: 40px;
+  text-align: center;
+}
+
+/* ------------------------------------------------------------ viewport */
+
+#viewport {
+  position: relative;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 18px 12px 60px;
+}
+
+#pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.page {
+  position: relative;
+  background: #fff;
+  box-shadow: var(--shadow);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.page canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.page .placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa4b1;
+  font-size: 12px;
+}
+
+/* pdf.js 风格文本层：透明文字叠在 canvas 上，只用于选择 */
+
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.textLayer span,
+.textLayer br {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  transform-origin: 0% 0%;
+  cursor: text;
+}
+
+.textLayer ::selection {
+  background: rgba(31, 111, 235, 0.32);
+}
+
+.textLayer ::-moz-selection {
+  background: rgba(31, 111, 235, 0.32);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 40px;
+  pointer-events: none;
+}
+
+.empty h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.empty p {
+  margin: 0;
+  max-width: 560px;
+  color: var(--muted);
+}
+
+.empty-actions {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.empty.dragover {
+  background: var(--accent-soft);
+}
+
+.empty[hidden] {
+  display: none;
+}
+
+/* -------------------------------------------------------------- 状态栏 */
+
+.status {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 30;
+  background: rgba(33, 38, 45, 0.92);
+  color: #fff;
+  padding: 7px 12px;
+  border-radius: 8px;
+  max-width: 60vw;
+}
+
+.status.error {
+  background: rgba(190, 45, 45, 0.94);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 56px;
+  transform: translateX(-50%);
+  z-index: 40;
+  background: rgba(33, 38, 45, 0.94);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 8px;
+  max-width: 70vw;
+}
+
+/* ----------------------------------------------------------- 翻译卡片 */
+
+.pt-card {
+  position: fixed;
+  z-index: 50;
+  width: min(460px, calc(100vw - 24px));
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.pt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.pt-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.pt-title {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.pt-act {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.pt-act:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.pt-body {
+  padding: 10px 12px 12px;
+  max-height: 46vh;
+  overflow: auto;
+}
+
+.pt-src {
+  color: var(--muted);
+  font-size: 12.5px;
+  border-left: 3px solid var(--border);
+  padding-left: 8px;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.pt-out {
+  white-space: pre-wrap;
+  font-size: 15px;
+}
+
+.pt-out.loading {
+  color: var(--muted);
+}
+
+.pt-out.error {
+  color: #c0392b;
+  font-size: 13px;
+}

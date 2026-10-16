@@ -1,0 +1,6 @@
+{
+  "_comment": "Copy this file to config.local.json and fill in your own key. config.local.json is gitignored and is only read when the options page has no API key. NEVER commit the real file.",
+  "baseUrl": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "apiKey": "sk-your-key-here"
+}

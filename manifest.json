@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "PDF 划词翻译 · Select & Translate",
+  "version": "1.0.3",
+  "description": "选中即翻译：自带 PDF 阅读器（本地 pdf.js）划词/整句即时翻译；同时支持 Chrome/Edge 内置 PDF 阅读器与普通网页划词翻译。",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "clipboardRead",
+    "tabs",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "PDF 划词翻译",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "src/options.html",
+  "commands": {
+    "translate-selection": {
+      "suggested_key": {
+        "default": "Alt+Z"
+      },
+      "description": "翻译当前选中的文本"
+    },
+    "open-in-viewer": {
+      "suggested_key": {
+        "default": "Alt+X"
+      },
+      "description": "用翻译阅读器打开当前 PDF"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/viewer.html", "src/viewer.js", "src/viewer.css", "vendor/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

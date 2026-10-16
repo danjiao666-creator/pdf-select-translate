@@ -1,0 +1,13 @@
+{
+  "name": "pdf-translate-extension-dev",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "开发/测试脚手架：驱动 Edge 加载未打包扩展，验证自带 pdf.js 阅读器的划词翻译链路。",
+  "scripts": {
+    "smoke": "node test/smoke.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.11.1"
+  }
+}
