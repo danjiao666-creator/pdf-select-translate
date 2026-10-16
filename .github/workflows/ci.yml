@@ -54,3 +54,32 @@ jobs:
       - name: Python tool syntax
         run: |
           python3 -m compileall -q dev/tools && echo 'python tools ok'
+
+      # Regression guard: a UTF-8 file that was once read as GBK (the Windows PowerShell 5.1
+      # default) ends up containing Private Use Area chars or U+20AC (CP936 maps byte 0x80 to
+      # it). That silently corrupts Chinese text - it happened to README.md once.
+      - name: No mojibake (encoding damage) in text files
+        run: |
+          python3 - <<'PY'
+          import pathlib, subprocess, sys
+          files = subprocess.run(['git','ls-files','-z'], capture_output=True, check=True).stdout.decode().split('\0')
+          exts = {'.md','.js','.mjs','.json','.py','.ps1','.cmd','.yml','.yaml','.html','.css','.txt'}
+          bad = []
+          for f in files:
+              if not f or pathlib.Path(f).suffix.lower() not in exts:
+                  continue
+              try:
+                  text = pathlib.Path(f).read_text(encoding='utf-8-sig')
+              except UnicodeDecodeError as exc:
+                  bad.append(f'{f}: not valid UTF-8 ({exc})')
+                  continue
+              n_pua = sum(1 for c in text if 0xE000 <= ord(c) <= 0xF8FF)
+              n_eur = text.count('\u20ac')
+              if n_pua or n_eur:
+                  bad.append(f'{f}: {n_pua} PUA chars, {n_eur} euro signs')
+          if bad:
+              print('mojibake detected:')
+              print('\n'.join('  ' + b for b in bad))
+              sys.exit(1)
+          print(f'encoding clean ({len(files)} tracked files)')
+          PY
