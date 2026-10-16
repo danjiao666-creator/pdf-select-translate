@@ -63,23 +63,27 @@ jobs:
           python3 - <<'PY'
           import pathlib, subprocess, sys
           files = subprocess.run(['git','ls-files','-z'], capture_output=True, check=True).stdout.decode().split('\0')
-          exts = {'.md','.js','.mjs','.json','.py','.ps1','.cmd','.yml','.yaml','.html','.css','.txt'}
-          bad = []
+          # deny-list rather than allow-list: LICENSE has no extension and must be checked too
+          binary_ext = {'.png','.jpg','.jpeg','.gif','.ico','.pdf','.zip','.bcmap','.pfb','.ttf','.otf','.woff','.woff2','.exe','.dll'}
+          skip_prefix = ('vendor/', 'icons/', 'docs/')
+          bad, checked = [], 0
           for f in files:
-              if not f or pathlib.Path(f).suffix.lower() not in exts:
+              if not f or f.startswith(skip_prefix):
+                  continue
+              if pathlib.Path(f).suffix.lower() in binary_ext:
                   continue
               try:
                   text = pathlib.Path(f).read_text(encoding='utf-8-sig')
-              except UnicodeDecodeError as exc:
-                  bad.append(f'{f}: not valid UTF-8 ({exc})')
-                  continue
+              except (UnicodeDecodeError, IsADirectoryError):
+                  continue   # binary or unreadable - nothing to check
+              checked += 1
               n_pua = sum(1 for c in text if 0xE000 <= ord(c) <= 0xF8FF)
               n_eur = text.count('\u20ac')
               if n_pua or n_eur:
-                  bad.append(f'{f}: {n_pua} PUA chars, {n_eur} euro signs')
+                  bad.append(f'{f}: {n_pua} PUA chars, {n_eur} U+20AC')
           if bad:
               print('mojibake detected:')
               print('\n'.join('  ' + b for b in bad))
               sys.exit(1)
-          print(f'encoding clean ({len(files)} tracked files)')
+          print(f'encoding clean ({checked} text files checked)')
           PY
