@@ -23,15 +23,13 @@ jobs:
       - name: Syntax check all extension scripts
         run: |
           set -e
-          for f in src/background.js src/viewer.js; do
-            cp "$f" "/tmp/$(basename "$f").mjs"
-            node --check "/tmp/$(basename "$f").mjs"
-            echo "ok (esm) $f"
-          done
-          for f in src/content.js src/popup.js src/options.js; do
+          for f in src/*.js src/*.mjs desktop/*.cjs desktop/*.mjs; do
             node --check "$f"
-            echo "ok (script) $f"
+            echo "ok $f"
           done
+
+      - name: Backend regression tests (no network or secrets)
+        run: node --test dev/test/unit.mjs dev/test/layout.mjs dev/test/backup-unit.mjs dev/test/reader-unit.mjs dev/test/chat.mjs dev/test/desktop-unit.mjs
 
       - name: Validate manifest.json
         run: |

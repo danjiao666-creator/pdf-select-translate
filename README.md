@@ -1,236 +1,288 @@
-# PDF 划词翻译 · Select & Translate
+# 文献翻译器 1.3
 
-一个 Chrome / Edge（Manifest V3）扩展：**在 PDF 里选中句子，松手立刻出译文。**
+本地 PDF 阅读、划词翻译、全文翻译和文章 AI 讨论。提供 Windows 应用与 Chrome / Edge 扩展，两者共用阅读器与翻译逻辑，数据分别保存，可通过文档库备份迁移。
 
-- 自带 PDF 阅读器（本地打包 pdf.js，含 CJK CMaps）→ 真正的「选中即翻译」，可自动把片段补全成整句
-- 同时支持普通网页划词翻译（同一套引擎与设置）
-- 免费引擎开箱可用：Google / Microsoft / 有道 / MyMemory，可自动依次兜底
-- 可选自定义 OpenAI 兼容 API（DeepSeek、OpenAI、硅基流动、Ollama、LM Studio…），质量最好
-- **先秒出、再升级**：约 0.2 秒先给一版免费译文，大模型的译文边生成边替换（流式）
-- 全部依赖本地打包，无远程代码、无统计上报；译文只在本地缓存最近 500 条
+## 当前状态
 
-![自带阅读器里划选片段 → 整句补全 → 译文卡片](docs/screenshot.png)
+- 1.3 增加独立 Windows 应用、文章对话、目录、全文查找、书签、逐页笔记、备份恢复，以及跟随系统 / 浅色 / 深色主题。
+- 当前本机配置的真实 DeepSeek 请求再次返回 **HTTP 401**。需要更正凭据、账户或接口配置后，才能完成真实全文翻译及多轮对话的语义验收。旧版成功样例不代表当前凭据可用。
+- 受控 AI 响应只验证功能、布局和异常处理，**不证明实际模型翻译或推理质量**。真实论文参考译文测试也仅验证排版。
+- 最终免安装 ZIP 中的实际 EXE 已通过 14 项原生检查，221 个源码 / 资源文件与冻结源码逐字一致。已准备本机应用目录与桌面入口；安装程序完成构建和结构检查，但未运行安装向导。交付文件与操作说明位于桌面「文献翻译器」文件夹。
 
----
+## 1. 选择应用或插件
 
-## 1. 安装（开发者模式加载）
-
-```bash
-git clone https://github.com/danjiao666-creator/pdf-select-translate.git
-```
-
-或者直接下载本仓库的 zip 解压。
-
-1. 打开 `chrome://extensions/`（Edge 为 `edge://extensions/`）
-2. 打开右上角 **开发者模式**
-3. 点击 **加载已解压的扩展程序**，选择仓库根目录（含 `manifest.json` 的那一层）
-4. 建议顺手设置快捷键：`chrome://extensions/shortcuts`
-   （默认 `Alt+Z` 翻译选中，`Alt+X` 用阅读器打开 PDF）
-
-> 想翻译**本地文件**（`file:///…`）时，需要在扩展详情里额外打开 **「允许访问文件网址」**；
-> 或者直接把 PDF 拖进扩展阅读器窗口（推荐，不受任何跨域限制）。
-
-> Windows 用户还可以双击仓库里的 `open-reader.cmd` 直接打开自带阅读器（支持把 PDF 拖到它上面）。
-
-## 2. 怎么用
-
-### 打开「自带阅读器」的几种方式
-
-> 自带阅读器不是一个独立程序，而是扩展内的一个页面：`chrome-extension://<扩展ID>/src/viewer.html`。
-> 仓库里的 `open-reader.cmd` / `open-reader.ps1` 会按目录路径自动算出扩展 ID 并打开它。
-
-1. **点扩展图标** →「用翻译阅读器打开（本标签）」
-2. **Windows**：双击 `open-reader.cmd`（也可以把 PDF 文件**拖到它上面**直接打开）
-3. 在设置里打开 **「自动打开 .pdf 链接」** 后，点 PDF 链接会自动进阅读器
-
-### 推荐流程：用自带阅读器（真正的「选中即翻译」）
-
-1. 用上面任一方式打开阅读器
-2. 用鼠标划选任意文字，**松手立即出译文卡片**
-   - 只选了几个词也没关系：勾选 **整句** 会自动把选区扩展到完整句子（按句读与行边界）
-   - 卡片上可以 **重译 / 复制 / 关闭**，按 `Esc` 关闭
-3. 本地文件：把 PDF **拖进阅读器窗口**，或点 **「打开本地 PDF」**
-4. 工具栏可选择 **译成语言 / 引擎 / 缩放**；`Ctrl+滚轮` 缩放，`PgUp/PgDn` 翻页
-
-### Chrome / Edge 内置 PDF 阅读器（有先天限制，见第 5 节）
-
-内置阅读器由浏览器插件渲染，扩展**拿不到选区、也收不到鼠标事件**，因此只能这样触发：
-
-| 方式 | 操作 |
-| --- | --- |
-| 剪贴板 | 选中文字 → `Ctrl+C` → 点扩展图标 → **「翻译剪贴板内容」** |
-| 快捷键 | 选中文字 → `Ctrl+C` → 按 `Alt+Z`（在 PDF 页面里也是读剪贴板） |
-| 自动监听 | 设置里打开 **「内置阅读器：Ctrl+C 后自动翻译」**，之后复制即出卡片 |
-| 右键菜单 | 内置阅读器**不会**显示扩展的右键菜单项（浏览器限制） |
-
-### 普通网页
-
-选中文字即出译文（可在设置里改成「先显示『译』小按钮」）。
-
-## 3. 翻译引擎
-
-| 引擎 | 需要 Key | 说明 |
+| 形式 | 适用场景 | 数据与要求 |
 | --- | --- | --- |
-| 自动（默认） | 否 | 配了自定义 API 就先用它，否则在有道 / MyMemory / Google / Microsoft 之间按实测速度竞速 |
-| Google | 否 | 质量好，但部分网络（如中国大陆直连）不可达，且偶发 HTTP 429 |
-| Microsoft | 否 | 走 `edge.microsoft.com` 取 token + `api-edge` 接口，部分地区会 404 |
-| 有道（演示接口） | 否 | 非官方演示接口，国内网络通常可达，速度最快（实测 70~360ms） |
-| MyMemory | 否 | 免费兜底，单次约 500 字节（扩展会自动分句分片并并发请求） |
-| 自定义 API | 是 | OpenAI 兼容 `/chat/completions`，推荐 DeepSeek，质量与稳定性最好 |
+| Windows 应用 | 独立打开本地论文，不依赖浏览器扩展 | Windows x64；自带运行时；独立文档库和设置 |
+| Chrome / Edge 插件 | PDF 阅读，以及普通网页划词翻译 | 扩展开发者模式加载；数据属于当前浏览器个人资料 |
 
-**如果翻译总是失败**：说明当前网络到免费接口不通 → 在设置页配置自定义 API，例如
-接口地址 `https://api.deepseek.com/v1`、模型 `deepseek-chat`、你的 API Key。
-设置页有 **「测试翻译」** 按钮可立即验证。
+应用不设置默认浏览器或 PDF 关联。应用桌面快捷方式指向 `PaperTranslator.exe`；仓库的 `open-reader.cmd` / `open-reader.ps1` 是**插件阅读器启动器**，不是独立应用。
 
-### 3.1 速度
+### Windows 应用
 
-**默认行为：先秒出、再升级。** 划词后先用免费引擎给一版译文（约 0.2 秒），
-随后自定义大模型的译文会**边生成边替换**（角标显示「AI 生成中… n 字」→ 完成后变成引擎名）。
-本机实测（真实 DeepSeek Key，全新配置）：
+构建产物名称：
 
+- 安装包：`dist/desktop/PaperTranslator-Setup-1.3.0-x64.exe`。
+- 免安装 ZIP：`dist/desktop/PaperTranslator-Portable-1.3.0-x64.zip`。
+- 校验值：`dist/desktop/SHA256SUMS.txt`。
+
+安装包按当前用户安装，默认目录为 `%LOCALAPPDATA%\Programs\PaperTranslator`，不需要管理员权限。免安装 ZIP 解压后运行 `PaperTranslator/PaperTranslator.exe`；保留整个文件夹，不能只复制 EXE。
+
+**本机运行路径限制：** 已复现当前 Electron 运行时在原 OneDrive 中文目录中启动时异常退出。请将应用本体放在**非 OneDrive 的本地英文路径**，例如当前用户的 `%LOCALAPPDATA%\Programs\PaperTranslator`。若用户目录自身含中文，请选择另一个有写入权限的英文目录。中文 PDF 文件名、中文快捷方式与中文界面无需改名。
+
+应用尚无 Windows 代码签名，系统可能提示未知发布者。核对交付来源和 SHA-256，不要为运行软件关闭安全软件。没有内置自动更新下载，升级使用后续安装包。
+
+点击「打开 PDF」、拖文件进窗口、把 PDF 拖到应用快捷方式，或运行：
+
+```powershell
+& "$env:LOCALAPPDATA\Programs\PaperTranslator\PaperTranslator.exe" 'C:\Papers\paper.pdf'
 ```
-第一段（有道，秒出）  : 363 ms    ← 几乎立刻看到译文
-大模型流式首字        : 1777 ms   ← 开始逐字替换
-完成（deepseek-chat） : 1873 ms
+
+再次启动会把文件交给已有应用窗口。免安装版也使用独立用户数据目录，不把文档库放在解压目录。
+
+### Chrome / Edge 插件
+
+1. 解压 `pdf-translate-extension-1.3.0.zip`，保留含 `manifest.json` 的完整目录。
+2. Chrome 打开 `chrome://extensions/`；Edge 使用 `edge://extensions/`。
+3. 开启「开发者模式」→「加载已解压的扩展程序」，选择该目录。
+4. 点击扩展图标打开阅读器，将 PDF 拖入或点击「打开 PDF」。
+5. 若通过 `file:///...` 链接读取文件，在扩展详情另行启用「允许访问文件网址」；直接拖入不需要此项。
+
+升级时保留原目录、浏览器个人资料和扩展 ID，更新后点击「重新加载」，关闭旧阅读器并重新打开。移动目录可能改变未签名扩展 ID；迁移或卸载前先备份。
+
+Windows 插件启动器需要 PowerShell 7，默认 Chrome，不修改系统默认浏览器：
+
+```powershell
+pwsh -File .\open-reader.ps1
+pwsh -File .\open-reader.ps1 -Browser Edge
 ```
 
-其它机制：
+当前自动化主要使用 Chrome 155，不将 Chrome 通过写成 Edge 完整验收通过。
 
-| 情况 | 行为 |
+## 2. 日常阅读
+
+### 文档库与阅读工具
+
+- 「导入 PDF」支持多选或拖入，按内容指纹去重并保存本地副本，不修改磁盘原始文件。
+- 支持名称搜索、最近阅读 / 最近导入 / 名称排序、重命名、继续阅读和删除。
+- 阅读位置、全文译文、书签、笔记、讨论和草稿关联到文档；再次打开无需原路径。
+- 密码 PDF 保存原始加密字节，不保存密码，重新打开需再次输入。
+- 删除会清除本机副本及关联记录，不删除磁盘原文件；建议先备份。
+- 「目录」读取 PDF 自带大纲，支持层级与跳转；没有大纲时不伪造章节。
+- 「查找」搜索文字层并显示页码、上下文和高亮，可停止长文搜索；结果或页内文字达到上限会明确提示不完整。
+- 「书签」收藏当前页；「笔记」按页保存。切页不会把未保存笔记误记到下一页，记录可导出 Markdown。
+- 多窗口独立笔记按修改合并；对话被另一窗口更新时暂停本窗口保存，保留本地内容供导出，不静默覆盖。
+
+支持适合宽度、整页、缩放与页码跳转。深色主题不反转 PDF 页面和图表颜色。
+
+### 划词翻译
+
+自带阅读器中选中文字即可翻译；关闭「选中即译」后先显示按钮，点击才发送。「整句补全」尝试把短选区扩展为句子。卡片支持重译、复制和「问 AI」。单次选区上限 4000 字符，超长会提示，不静默截断。
+
+Chrome / Edge 原生 PDF 阅读器不能把内部选区直接交给扩展，不保证原生阅读器的松手翻译。推荐改用本阅读器，或先复制文字，再点击插件弹窗的「翻译剪贴板内容」。普通网页划词仅由插件提供。
+
+## 3. 配置翻译与 AI
+
+在「设置 → 自定义 API」填写接口、模型和自己的有效 Key：
+
+| 字段 | 示例或说明 |
 | --- | --- |
-| 「先秒出」阶段 | 所有免费引擎**同时发**，谁快用谁 |
-| 大模型输出 | **流式**（SSE）逐字显示；网关不支持流式会自动退回一次性请求 |
-| 每个引擎的超时 | 免费接口 5~6 秒、自定义 API 120 秒 |
-| 被墙 / 超时的引擎 | 记入 **10 分钟冷却**，不再反复去撞 |
-| 引擎实测耗时 | 记录滑动平均，auto 时**最快的排最前** |
-| 同一句话 | 结果本地缓存（含升级后的高质量版本），重复划选 0ms |
-| 显式选了「自定义 API」 | 同样享受「先秒出」——升级目标本来就是它 |
+| 接口地址 | `https://api.deepseek.com/v1`，通常填 `/chat/completions` 之前的部分 |
+| 模型 | 服务商实际支持的名称，例如 `deepseek-chat` |
+| API Key | 保存后只显示已配置状态，不回显已有 Key |
+| 额外请求参数 | 可选 JSON 对象；思考模式等参数需匹配具体服务 |
 
-各引擎实测（本机、中国大陆网络）：Google ❌ 429、Microsoft ❌ 404、
-有道 ✅ 70~360ms、MyMemory ✅ 500~1000ms、`deepseek-chat` ✅ 首字 0.4~1.8s。
+支持 OpenAI 兼容 Chat Completions 接口，本地 Ollama / LM Studio 等可能不要求 Key。质量、可达性和收费取决于实际服务，不保证固定延迟或“最好”质量。
 
-> 同一批文本、同一把 Key、同一网络下的首字时间对比：
-> `deepseek-chat` **382 ms** ｜ `deepseek-flash` **2038~3862 ms**（不推荐）。
-> 设置页在填了 `flash` / `reasoner` 时会直接给出警告。
+「测试翻译」固定测试所选服务，不读取缓存、不用其他引擎结果冒充成功。「测试各引擎速度」只展示当次结果，不擅自改配置。HTTP 401 应检查 Key、地址、账户及模型权限，不能算作真实翻译验收完成。
 
-设置页还有 **「⚡ 测速并选用最快引擎」**：并发测一遍所有引擎，把最快的固定下来。
+### 免费服务与文本发送范围
 
-### 3.2 关掉「思考」让它更快
+Google、Microsoft、有道演示接口和 MyMemory 仅用于免费翻译尝试，可能限流、改接口或不可达，不是软件托管的稳定服务，也不能用于 AI 对话。
 
-带思考的模型（`deepseek-reasoner`、部分 Qwen/GLM 默认开启思考）会先输出一大段推理再翻译。三种处理：
+- 划词开启「快速译文 + AI 优化」时，文字可能发送给多个免费服务和已配置 AI，再以最终 AI 结果更新。
+- 自动模式可能尝试不同免费服务。不希望发给免费服务时，选择「自定义 API」并关闭快速模式。
+- 全文配置 AI 后只使用该 AI 的最终结果，不启用免费首译竞速；鉴权失败不偷偷换服务。
+- 对话只用已配置 AI，不用翻译接口伪装回答。失败不自动重试；手动「重试」会新发请求，可能重新计费。
 
-1. **换模型**（最有效）：DeepSeek 用 `deepseek-chat` 而不是 `deepseek-reasoner`
-2. **设置页 → 思考模式** 里选预设，会自动填好「额外请求参数」：
-   - 关闭思考 · 通义/Qwen 等 → `{"enable_thinking": false}`
-   - 思考强度最低 · OpenAI 兼容 → `{"reasoning_effort": "low"}`
-   - 关闭思考 · 部分网关 → `{"thinking": {"type": "disabled"}}`
-3. 也可以手写任意 JSON（会合并进 `/chat/completions` 请求体）
+高级 JSON 不允许覆盖 `model`、`messages` 或 `stream`。更换模型、思考参数或输出上限前，先测试短段落。
 
-### 3.3 把 Key 放在扩展目录（可选）
+### 本地配置文件
 
-扩展目录下可以放一个 **`config.local.json`**（本机私密文件，**不会**被打进分发包）：
+插件可选用根目录 `config.local.json`，格式参考 `config.local.example.json`。它是**明文私密文件**，排除在版本控制与分发包之外：
 
 ```json
-{ "baseUrl": "https://api.deepseek.com/v1", "model": "deepseek-chat", "apiKey": "sk-..." }
+{
+  "baseUrl": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "apiKey": "YOUR_API_KEY"
+}
 ```
 
-设置页里的 API Key 优先级更高；留空时就用这个文件里的。模板见 `config.local.example.json`。
+浏览器已保存 Key 优先；未保存且接口匹配时才使用本地兜底，不自动把文件里的 Key 写回浏览器。应用安装包不自动读取源码目录此文件；仅源码开发模式显式传入 `--developer-config=绝对路径` 才可加载。
 
-## 4. 设置项
+## 4. 全文翻译与导出
 
-| 设置 | 说明 |
+1. 点击「全文翻译」，确认语言、服务、费用与排版说明后开始。
+2. 查看完成 / 失败 / 保留原文提示，以「原文 / 译文 / 双栏对照」核对；点击译文区域查看完整段落。
+3. 支持暂停、继续、失败重试和段落检查点。同一文档及配置跨窗口互斥；已发送 API 请求仍可能计费。
+4. 保存异常会提示并提供重试，离开未保存任务时警告。可随时用「导出段落对照」保存 Markdown，部分完成也能保留文字结果。
+5. 可翻译段落全部完成后导出译文 PDF，原文件不修改。
+
+**近似排版，不是出版级原生重排。** 按文字层几何位置识别分栏、段落，保留页面尺寸、页数和图表。独立公式、参考文献书目、细小图内文字、扫描页、旋转或竖排等区域可能保留原文。译文放不下或会覆盖其他文字时，不截断或无限缩小，而是保留原文并提供段落对照。
+
+**译文 PDF 是高清图像型 PDF。** 导出后无法再次划词、全文搜索，也不保留原来的交互表单、链接与数字签名结构。需可复制文字时用段落 Markdown 或阅读器。彩色背景、复杂表格、跨页混排和嵌入图片文字需人工核对。
+
+## 5. 结合文章讨论
+
+点击「AI 对话」，或选择原文后在卡片点「问 AI」。快捷问题只填入输入框，不自动发送，可先修改。
+
+- 本机提取分栏段落，根据问题、当前页、选中内容及最近问题检索；不默认发送整个 PDF。
+- 点击回答的页码回到原文；展开「本轮参考原文」可查看实际发送的片段，不把引用存在当成结论正确。
+- 提示模型区分「依据原文」与「分析/推断」，证据不足时说明。文献中的指令性文本只作参考，不执行代码或工具。
+- 可停止流式生成；对话、草稿和选中引用按文档保存。新对话需确认清空，历史可导出 Markdown。
+- 页码是 PDF 文件页序，可能不同于印刷页码。回答、引文和统计数字仍须核对。
+
+当前为本地关键词、主题及章节启发式检索，不是向量知识库。每轮最多 12 段、约 18000 字符；索引达到前 1000 页或约 350 万字符时提示范围限制。没有图像理解或 OCR，不能声称完整理解全部图表。
+
+## 6. 备份、迁移与保存异常
+
+文档库「备份」可选全部或单篇，包含 PDF、阅读位置、译文、书签、笔记、对话和草稿。「恢复备份」完整校验后合并，较新本机记录优先，不用旧备份无条件覆盖。
+
+- 应用、插件、不同浏览器或个人资料间通过备份迁移，不自动同步或上传云端。
+- 单份备份上限 512 MB，文字记录上限 32 MB，超出请按单篇分批备份。
+- **ZIP 未加密。** 含原文、笔记和对话，不主动包含 API 设置与 Key；自行写进聊天或笔记的敏感信息仍会进入备份。
+- 恢复仅接受支持的备份格式；正在写入或有未保存草稿时需先处理，不把任意 ZIP 当文档库。
+- 单独导出笔记、讨论、段落 Markdown 可应急保存，但不是完整文档库备份。
+
+保存失败或冲突时先保留窗口，重试或导出，不要立即清数据或重装。正常关闭有保存流程；强制结束、崩溃或断电仍可能丢失最后尚未落盘的修改。
+
+## 7. 数据与安全
+
+| 内容 | Windows 应用 | 插件 |
+| --- | --- | --- |
+| 文档和记录 | `%APPDATA%\文献翻译器` 下的用户数据 | 当前扩展来源的 IndexedDB |
+| 普通设置 | 用户数据内 `preferences.json` | `chrome.storage.local` |
+| API Key | Electron `safeStorage` 使用 Windows 系统加密 / DPAPI；无法加密则拒绝保存，不回退明文 | 浏览器扩展本地存储或可选明文文件；**不是应用版 DPAPI 存储** |
+| 升级与卸载 | 升级不主动清库；卸载默认保留用户数据，仍建议先备份 | 卸载、清存储或丢失个人资料可能删除记录 |
+
+应用 Key 解密依赖原 Windows 用户环境，复制设置文件不能代替跨设备迁移凭据。两端不回显已有 Key，不将其写入分发包或文档库备份。
+
+应用阅读窗口禁用 Node，启用上下文隔离及沙箱，仅允许明确业务 IPC 与资源路径。外部网页 / 邮件链接需确认后交系统应用，不允许文献直接读取任意磁盘文件、执行脚本或任意开窗口。插件需要网站访问、标签页、存储、脚本与剪贴板等权限，可在浏览器限制允许的网站。
+
+pdf.js、字体及 CMaps 本地打包，无遥测、云同步或运行时远程代码。离线可阅读、搜索、记笔记和备份；翻译、对话、远程下载需要网络。服务端留存与收费以实际服务商政策为准。
+
+## 8. 常用快捷键
+
+| 快捷键 | 操作 |
 | --- | --- |
-| 目标语言 / 源语言 | 支持中（简/繁）、英、日、韩、法、德、西、俄等 |
-| 引擎 | 见上表 |
-| 选中即译 | 关闭后改为「先显示『译』按钮，点击才翻译」 |
-| 先秒出、再升级 | 免费引擎先出译文，随后用自定义 API 的结果自动替换 |
-| 整句 | 划选片段自动扩展到完整句子 |
-| 自动打开 .pdf 链接 | 点击/跳转 `.pdf` 链接时自动换到自带阅读器（默认关闭） |
-| 内置阅读器剪贴板监听 | 在内置阅读器里 `Ctrl+C` 后自动翻译（默认关闭） |
-| 卡片字号 | 译文卡片字体大小 |
-| 自定义 API | Base URL / API Key / 模型 / 思考模式 / 额外请求参数 / 系统提示词 |
-| ⚡ 测速并选用最快引擎 | 并发测一遍所有引擎，把最快的固定下来 |
+| `Ctrl+O` | 打开 PDF |
+| `Ctrl+F` | 查找；查找框 Enter / Shift+Enter 切换结果 |
+| `Ctrl+D` | 添加 / 取消当前页书签 |
+| `Ctrl+0` | 适合宽度 |
+| `Ctrl++` / `Ctrl+-`、`Ctrl+滚轮` | 缩放 |
+| `PageUp` / `PageDown`、左右方向键 | 翻页，输入状态不拦截 |
+| `Ctrl+Home` / `Ctrl+End` | 首页 / 尾页 |
+| `Esc` | 关闭卡片或面板 |
+| 对话框 `Enter` / `Shift+Enter` | 发送 / 换行 |
+| 插件 `Alt+Z` / `Alt+X` | 翻译选区或剪贴板 / 用插件阅读器打开 |
 
-## 5. 为什么需要自带阅读器（技术说明）
+插件快捷键冲突可在 `chrome://extensions/shortcuts` 或 `edge://extensions/shortcuts` 修改。常用翻译偏好在阅读工具栏，外观、API 和高级参数在设置页。
 
-浏览器的内置 PDF 阅读器把 PDF 交给内部插件（PDFium）渲染：
+## 9. 常见问题与限制
 
-- 页面 DOM 里没有 PDF 文字，`window.getSelection()` 恒为空
-- 插件里的鼠标 / 选区事件不会冒泡到网页，`mouseup` / `selectionchange` 都收不到
-- 内置阅读器显示自己的原生右键菜单，扩展的 `contextMenus` 项不会出现
-- 唯一可靠到达的入口是 `chrome.commands` 快捷键（命令会送到扩展的 service worker）
+- **仍进入 Edge：** 旧快捷方式可能是插件启动器或 PDF 关联。使用应用快捷方式或 `PaperTranslator.exe`，无需改默认浏览器。
+- **应用启动即退出：** 检查是否仍在 OneDrive / 中文运行路径，或只复制了单个 EXE，按安装说明处理。
+- **扫描件无文字：** 本版不含 OCR，需先用其他工具生成可靠文字层再导入。
+- **401/403/429：** 检查凭据、权限、限流与余额；受控测试通过不意味着个人账户可用。
+- **网络 PDF 打不开：** 可能需要登录或存在下载 / 跨域限制；先保存本地再导入。
+- **大文档：** 单份 PDF 导入上限 200 MB，高清导出较耗内存；千页、超大尺寸和复杂混排未全面验收。
+- **导出不能选词：** 图像型导出的限制，不是原始 PDF 被修改。
+- **找不到旧记录：** 确认应用 / 插件、浏览器个人资料及扩展 ID 是否切换，这些存储不共享，可用备份迁移。
 
-所以本扩展的做法是：
+## 10. 开发、构建与验证
 
-1. **自带阅读器**：用本地 pdf.js 渲染 canvas，并自己铺一层透明文字层（span 绝对定位 + `scaleX` 校正），
-   于是浏览器原生选区 / `Range` 作用在 PDF 文字上 → 划词、整句扩展、卡片都成为可能。
-2. **内置阅读器兜底**：快捷键 / 弹窗按钮 / 剪贴板监听，把用户已复制的文本读回来翻译。
+### 环境
 
-## 6. 目录结构
+本机使用 Node.js 24、Python 3、PowerShell 7、Chrome 155。桌面依赖锁定在根目录 `package-lock.json`，浏览器测试依赖位于 `dev/`。PowerShell 脚本使用 7，避免 5.1 的 UTF-8 中文编码问题。
 
-```
-pdf-select-translate/           ← 仓库根目录 = 可直接「加载已解压的扩展程序」的目录
-├── manifest.json               # MV3 清单（权限、命令、内容脚本）
-├── open-reader.cmd / .ps1      # Windows：按目录路径算出扩展 ID 并打开自带阅读器
-├── icons/                      # 图标（含快捷方式用的 icon.ico）
-├── src/
-│   ├── background.js           # service worker：引擎调度、超时/冷却/竞速、流式、右键菜单、快捷键
-│   ├── content.js              # 内容脚本：普通网页划词 + 内置阅读器兜底 + 剪贴板监听
-│   ├── viewer.html/.css/.js    # 自带 pdf.js 阅读器（文字层、整句扩展、译文卡片、流式显示）
-│   ├── popup.html/.css/.js     # 工具栏弹窗：打开阅读器、剪贴板翻译、快捷设置
-│   └── options.html/.css/.js   # 设置页：引擎、语言、自定义 API、思考模式、测速
-├── vendor/                     # 本地打包的 pdf.js（worker、cmaps、standard_fonts）
-├── docs/screenshot.png         # README 截图
-├── config.local.example.json   # 本地 Key 文件模板（真正的 config.local.json 已被 gitignore）
-├── dev/                        # 开发 / 测试脚手架（不参与扩展加载）
-└── .github/workflows/ci.yml    # 语法检查 + 清单校验 + 防止 Key 误提交
+```powershell
+npm ci
+pnpm --dir dev install --frozen-lockfile
 ```
 
-数据与隐私：所有翻译请求从扩展后台发出；只在本地缓存最近 500 条译文；除所选翻译引擎外不向任何服务器发送数据。
+浏览器测试使用隔离扩展副本和个人资料，不移动真实 Key 文件，可用 `BROWSER_PATH` 指定 Chromium。不要并发执行会修改同名截图或访问真实服务的脚本。
 
-## 7. 已知限制
+### 构建
 
-- 内置 PDF 阅读器无法「选中即翻译」（浏览器架构限制，见第 5 节）
-- 扫描版 PDF（纯图片、没有文字层）无法划词 —— 需要 OCR，不在本扩展范围内
-- 加密 PDF 会弹出密码输入框；打不开的链接（需要登录 / 拒绝跨域）会提示改用本地文件
-- 免费接口可能限流；追求稳定请在设置里配置自定义 API
-
-## 8. 开发与测试
-
-```bash
-cd dev
-pnpm install                 # 只装 puppeteer-core（约 37MB）
-node test/smoke.mjs          # 端到端：17 项断言，真实 Edge + 未打包扩展 + mock 大模型
-node test/screenshot.mjs     # 重新生成 docs/screenshot.png
-node test/local-config.mjs   # 需要 config.local.json（真实 Key），验证「秒出 + 升级」
+```powershell
+npm run desktop:dir
+npm run desktop:build
+node dev/test/desktop-package.mjs
+python dev/tools/package.py
 ```
 
-测试覆盖：扩展能加载、快捷键注册、pdf.js 文字层、整句扩展、划词出卡片、
-**先秒出 + 大模型流式替换**、普通网页划词、`.pdf` 链接自动跳转、弹窗剪贴板链路、无未捕获脚本错误。
+`desktop:build` 输出安装包与免安装 ZIP；`desktop-package.mjs` 校验当前源码、原生 EXE 和包结构。`desktop:portable` 仅生成免安装产物。插件 ZIP 输出到仓库上一级。构建不会自动公开发布或签名。
 
-开发时踩过的坑（都已在代码里规避）：
+`npm run desktop` 用于源码启动，也需满足当前机器的英文、非 OneDrive 运行路径要求。桌面测试复制运行时到隔离英文目录、使用独立用户数据，避免污染真实文档库。
 
-- **Windows PowerShell 5.1 读没有 BOM 的 UTF-8 `.ps1`** 会按 ANSI 解码 → 中文乱码 + 语法错
-- **PS 5.1 抓外部程序输出按 ANSI 解码** → 中文被写坏（本项目 README 就这样坏过一次）
-- **PS 5.1 把带双引号的参数传给原生 exe 时会吞引号** → `node -e` / `curl -d` 的 JSON 直接失效
-- 所以仓库里的 `.ps1` 工具一律 `#Requires -Version 7.0`，请用 PowerShell 7 跑
-- pdf.js 的文字层是很多独立 span，直接拼接会出现单词粘连 → 见 `viewer.js` 的 `buildLayerModel()`
-- 扩展 ID 由**目录绝对路径**决定，所以 `open-reader` 是运行时算出来的
+### 测试入口
 
-打包发布：
+```powershell
+# 确定性单元测试，不需真实 Key
+node --test dev/test/unit.mjs dev/test/layout.mjs dev/test/backup-unit.mjs dev/test/reader-unit.mjs dev/test/chat.mjs dev/test/desktop-unit.mjs
 
-```bash
-python dev/tools/package.py    # 生成 <上级目录>/pdf-select-translate-<version>.zip
-python dev/tools/make_icons.py # 重新生成图标（需要 Pillow）
+# 浏览器集成与异常处理
+node dev/test/regression.mjs
+node dev/test/advanced.mjs
+node dev/test/usability.mjs
+node dev/test/reader-browser.mjs
+node dev/test/reader-backup-browser.mjs
+node dev/test/chat-browser.mjs
+node dev/test/chat-storage-browser.mjs
+node dev/test/document-storage-browser.mjs
+node dev/test/smoke.mjs
+
+# 当前构建的真实桌面 EXE，受控 API
+node dev/test/desktop.mjs
 ```
 
-## 9. 许可证与致谢
+`npm --prefix dev test` 运行 1.3 单元与浏览器回归；冒烟、真实论文专项和实际桌面 EXE 需按上方命令另行运行。各套件通过状态、待复验项与历史现场见 [自查记录](docs/AUDIT-2026-10-17.md)。远端 CI 只是轻量检查子集，不代替本机安装包验收。
 
-本项目以 **MIT** 许可证开源，见 [LICENSE](LICENSE)。
+真实论文排版和真实模型链路分开验证，原文件不随分发包发布：
 
-内置的第三方资源保留各自许可证：
+```powershell
+$env:PDF_REPRO_FILE = 'C:\Papers\s41467-020-18353-4.pdf'
+node dev/test/nature.mjs
 
-- [pdf.js](https://github.com/mozilla/pdf.js)（`vendor/pdf.min.mjs`、`pdf.worker.min.mjs`、`cmaps/`）— Apache-2.0，Mozilla
-- `vendor/standard_fonts/` — Liberation 字体（SIL OFL）与 Foxit 字体，见目录下的 `LICENSE_*` 文件
+# 实际调用配置服务，需要有效凭据，可能产生费用
+$env:REAL_TRANSLATION_PDF = $env:PDF_REPRO_FILE
+$env:REAL_PREVIEW_PAGE = '2'
+node dev/test/full-document-real.mjs
+```
 
-发布到浏览器扩展商店时请一并保留这些许可证文件。
+`nature.mjs` 用经核对的参考中文验排版；`full-document-real.mjs` 才调用真实模型。失败不记作语义通过。截图默认在忽略目录 `dev/test/artifacts/`，不会自动替换预览。
+
+### 代码位置
+
+| 路径 | 职责 |
+| --- | --- |
+| `src/viewer.*`、`src/reader-tools.*` | 阅读、目录、查找、书签与笔记 |
+| `src/background.js` | 共享设置、翻译与对话传输 |
+| `src/document-tools.mjs`、`src/pdf-layout.mjs` | 文档库、全文任务、近似原位排版 |
+| `src/article-chat.*`、`src/chat-context.mjs` | 讨论、检索、引用和会话保存 |
+| `src/library.mjs`、`src/library-backup.mjs` | IndexedDB、备份与恢复校验 |
+| `desktop/`、`src/desktop-platform.js` | 原生应用、安全存储和受限桥接 |
+| `src/ui.css`、`src/appearance.js` | 共享外观与主题 |
+| `vendor/` | 本地 pdf.js、字体与 CMaps |
+| `dev/test/` | 单元、浏览器和桌面验收 |
+
+## 预览与许可证
+
+![文档库历史预览](docs/library.png)
+
+![全文对照历史预览](docs/full-translation.png)
+
+以上为 1.2 阶段受控响应截图，只说明界面，不是 1.3 最终安装验收或真实翻译质量证明。`docs/screenshot.png` 是更早版本短句样例，也不能证明当前凭据可用。
+
+项目采用 [MIT](LICENSE)。pdf.js 为 Apache-2.0；`vendor/standard_fonts/` 各字体保留对应许可证。桌面第三方声明见 [desktop/LICENSES.txt](desktop/LICENSES.txt)，分发时一并保留。

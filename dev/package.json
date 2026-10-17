@@ -3,9 +3,15 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "开发/测试脚手架：驱动 Edge 加载未打包扩展，验证自带 pdf.js 阅读器的划词翻译链路。",
+  "description": "开发/测试脚手架：后台单元测试与隔离 Chromium 扩展回归，验证自带 pdf.js 阅读器的划词翻译链路。",
   "scripts": {
-    "smoke": "node test/smoke.mjs"
+    "smoke": "node test/smoke.mjs",
+    "test": "npm run test:unit && npm run test:browser",
+    "test:unit": "node --test test/unit.mjs test/layout.mjs test/backup-unit.mjs test/reader-unit.mjs test/chat.mjs test/desktop-unit.mjs",
+    "test:browser": "node test/regression.mjs && node test/advanced.mjs && node test/usability.mjs && node test/reader-browser.mjs && node test/reader-backup-browser.mjs && node test/chat-browser.mjs && node test/chat-storage-browser.mjs && node test/document-storage-browser.mjs",
+    "regression": "npm run test:browser",
+    "test:real": "node test/full-document-real.mjs",
+    "test:nature": "node test/nature.mjs"
   },
   "devDependencies": {
     "puppeteer-core": "^23.11.1"

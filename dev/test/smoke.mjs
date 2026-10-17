@@ -15,7 +15,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
+import { launchExtension, screenshot } from './browser.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const devDir = path.dirname(here);
@@ -117,43 +117,14 @@ function attachLogs(page, bucket) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  // 测试期间把本地私密配置移开：否则 auto 会带上真实 API Key，测试结果就不确定了
-  const localConfig = path.join(extDir, 'config.local.json');
-  const localConfigBak = `${localConfig}.test-bak`;
-  let moved = false;
-  if (fs.existsSync(localConfig)) {
-    fs.renameSync(localConfig, localConfigBak);
-    moved = true;
-    // 万一被管道截断/异常终止，也要把文件放回去
-    const restore = () => {
-      try {
-        if (moved && fs.existsSync(localConfigBak)) {
-          fs.renameSync(localConfigBak, localConfig);
-          moved = false;
-        }
-      } catch (_) {}
-    };
-    process.on('exit', restore);
-    process.on('SIGINT', () => {
-      restore();
-      process.exit(130);
-    });
-  }
-
   const server = await startServer();
-  const browser = await puppeteer.launch({
-    executablePath: EDGE,
-    headless: true,
-    args: [
-      `--disable-extensions-except=${extDir}`,
-      `--load-extension=${extDir}`,
-      '--no-first-run',
-      '--no-default-browser-check'
-    ]
-  });
-
+  let harness;
+  let browser;
   let exitCode = 0;
   try {
+    harness = await launchExtension(extDir);
+    browser = harness.browser;
+    info(`浏览器：${await browser.version()}`);
     const swTarget = await browser.waitForTarget(
       (t) => t.type() === 'service_worker' && t.url().includes('background.js'),
       { timeout: 20000 }
@@ -354,7 +325,11 @@ async function main() {
       `http://127.0.0.1:${PORT}/sample.pdf`
     )}`;
     await viewer.goto(viewerUrl, { waitUntil: 'domcontentloaded' });
+    await viewer.bringToFront();
     await viewer.waitForSelector('.textLayer span', { timeout: 30000 });
+    await viewer.waitForFunction(() => !document.getElementById('openOutline').disabled && document.getElementById('status').hidden);
+    // Library hydration may restore the fit scale and replace the first text layer.
+    await sleep(200);
 
     const spanInfo = await viewer.evaluate(() => {
       const spans = [...document.querySelectorAll('.textLayer span')].map((s) => s.textContent);
@@ -443,7 +418,7 @@ async function main() {
         viewerOut.startsWith(MOCK_PREFIX) && viewerOut.includes('The quick brown fox'),
         `第一段="${String(provisional).slice(0, 24)}" → 最终 [${state.badge}] ${viewerOut.slice(0, 60)}`
       );
-      await viewer.screenshot({ path: path.join(artifacts, 'viewer-selection.png') });
+      await screenshot(viewer, path.join(artifacts, 'viewer-selection.png'));
     }
 
     /* ------------------------------------------------ 普通网页划词翻译 */
@@ -490,7 +465,7 @@ async function main() {
         )
       : '';
     record('普通网页划词翻译可用', shadowOk && shadowOut.startsWith(MOCK_PREFIX), shadowOut.slice(0, 80));
-    await page.screenshot({ path: path.join(artifacts, 'webpage-selection.png') });
+    await screenshot(page, path.join(artifacts, 'webpage-selection.png'));
 
     /* -------------------------------------------- 自动用阅读器打开 PDF */
     await options.evaluate(
@@ -567,7 +542,7 @@ async function main() {
       .catch(() => false);
     const clipOut = clipOk ? await popup.evaluate(() => document.getElementById('clipResult').textContent.trim()) : '';
     record('弹窗「翻译剪贴板内容」链路可用', clipOk, clipOut.slice(0, 90));
-    await popup.screenshot({ path: path.join(artifacts, 'popup-clipboard.png') });
+    await screenshot(popup, path.join(artifacts, 'popup-clipboard.png'));
 
     /* ---------------------------------------------------- 全局错误检查 */
     const allErrors = [...viewerLogs, ...pageLogs, ...optLogs, ...popupLogs, ...pdfLogs].filter(
@@ -587,13 +562,9 @@ async function main() {
     console.error('测试异常：', err);
     exitCode = 1;
   } finally {
-    await browser.close().catch(() => {});
+    if (harness) await harness.cleanup();
+    server.closeAllConnections();
     server.close();
-    if (moved) {
-      try {
-        fs.renameSync(localConfigBak, localConfig);
-      } catch (_) {}
-    }
   }
   process.exit(exitCode);
 }

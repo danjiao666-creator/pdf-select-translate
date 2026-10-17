@@ -1,51 +1,12 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <title>PDF 划词翻译</title>
-    <link rel="stylesheet" href="popup.css" />
-  </head>
-  <body>
-    <header>
-      <span class="brand">译</span>
-      <div>
-        <strong>PDF 划词翻译</strong>
-        <div class="muted small" id="tabInfo">正在检测当前页面…</div>
-      </div>
-    </header>
-
-    <section class="block" id="pdfBlock" hidden>
-      <div class="ok small">检测到当前标签页是 PDF</div>
-      <button id="openCurrent" class="primary">用翻译阅读器打开（本标签）</button>
-      <button id="openCurrentNew">在新标签页打开</button>
-      <p class="muted small">在自带阅读器里，选中句子就会立刻翻译。</p>
-    </section>
-
-    <section class="block" id="notPdfBlock" hidden>
-      <div class="muted small" id="notPdfHint">
-        当前页面不是 PDF。你仍然可以在任意网页上划词翻译（选中文字后自动出现译文）。
-      </div>
-      <button id="openAnyWay">仍然用阅读器打开这个地址</button>
-    </section>
-
-    <section class="block">
-      <button id="openLocal" class="primary">打开本地 PDF 文件…</button>
-    </section>
-
-    <section class="block">
-      <button id="translateClip">翻译剪贴板内容</button>
-      <div class="muted small">
-        用于 Chrome/Edge <strong>内置</strong> PDF 阅读器：选中文字 → <code>Ctrl+C</code> → 点这里。
-        （内置阅读器不把选区交给扩展，只能走剪贴板。）
-      </div>
-      <div id="clipResult" class="clip-result" hidden></div>
-      <button id="copyClipResult" hidden>复制译文</button>
-    </section>
-
-    <section class="block">
-      <label class="row">
-        <span>译成</span>
-        <select id="targetLang">
+<html lang="zh-CN"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>PDF 划词翻译</title><link rel="stylesheet" href="ui.css" /><link rel="stylesheet" href="popup.css" /></head><body>
+  <header><span class="brand">译</span><div><div class="eyebrow">SELECT &amp; TRANSLATE</div><strong>PDF 翻译</strong></div><button id="openOptions" class="quiet settings-button" title="设置">设置</button></header>
+  <div class="page-context"><span class="context-dot"></span><span id="tabInfo">正在检测当前页面…</span></div>
+  <section id="pdfBlock" class="open-section" hidden><h1>当前 PDF</h1><p>在阅读器中划选句子，译文即刻呈现。</p><button id="openCurrent" class="primary">用翻译阅读器打开 ↗</button><button id="openCurrentNew" class="quiet">在新标签页打开</button></section>
+  <section id="notPdfBlock" class="open-section" hidden><h1>划词翻译</h1><p id="notPdfHint">网页上选中文字即可翻译。</p><details class="address-fallback"><summary>当前地址是没有后缀的 PDF？</summary><button id="openAnyWay">尝试用阅读器打开</button></details></section>
+  <button id="openLocal" class="local-action">打开文档库 / 导入 PDF <span>＋</span></button>
+  <section class="clipboard-section"><div class="section-caption"><span>剪贴板翻译</span><span class="muted small">先 Ctrl+C，再翻译</span></div><button id="translateClip">翻译已复制的文字 →</button><div id="clipResult" class="clip-result" role="status" hidden></div><button id="copyClipResult" class="quiet" hidden>复制译文</button></section>
+  <details class="quick-settings"><summary>翻译偏好 <span>语言 · 引擎 · 交互</span></summary><div class="quick-settings-body"><label class="row"><span>目标语言</span><select id="targetLang">
           <option value="zh-CN">简体中文</option>
           <option value="zh-TW">繁體中文</option>
           <option value="en">English</option>
@@ -55,32 +16,13 @@
           <option value="de">Deutsch</option>
           <option value="es">Español</option>
           <option value="ru">Русский</option>
-        </select>
-      </label>
-      <label class="row">
-        <span>引擎</span>
-        <select id="engine">
+        </select></label><label class="row"><span>翻译引擎</span><select id="engine">
           <option value="auto">自动（推荐）</option>
           <option value="google">Google（免费）</option>
           <option value="microsoft">Microsoft（免费）</option>
           <option value="youdao">有道（免费）</option>
           <option value="mymemory">MyMemory（免费）</option>
           <option value="custom">自定义 API</option>
-        </select>
-      </label>
-      <label class="row check"><input type="checkbox" id="autoTranslate" /> 选中即译</label>
-      <label class="row check"><input type="checkbox" id="sentenceMode" /> 自动扩展到整句</label>
-      <label class="row check"><input type="checkbox" id="autoOpenPdf" /> 自动用阅读器打开 PDF 链接</label>
-      <label class="row check"><input type="checkbox" id="clipboardWatch" /> 内置阅读器：Ctrl+C 后自动翻译</label>
-    </section>
-
-    <section class="block">
-      <div class="muted small">快捷键：<span id="shortcuts">读取中…</span></div>
-      <button id="openOptions">更多设置 / 自定义 API…</button>
-    </section>
-
-    <footer class="muted small">选中文本 → 即时翻译；Alt+Shift+Z 也可以手动触发。</footer>
-
-    <script src="popup.js"></script>
-  </body>
-</html>
+        </select></label><label class="row check"><span>选中即译</span><input type="checkbox" id="autoTranslate" /></label><label class="row check"><span>自动补全整句</span><input type="checkbox" id="sentenceMode" /></label><label class="row check"><span>自动打开 PDF 链接</span><input type="checkbox" id="autoOpenPdf" /></label><label class="row check"><span>内置 PDF 剪贴板监听</span><input type="checkbox" id="clipboardWatch" /></label></div></details>
+  <footer><span id="shortcuts">正在读取快捷键…</span></footer><script src="appearance.js"></script><script src="popup.js"></script>
+</body></html>

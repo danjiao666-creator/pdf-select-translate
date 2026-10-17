@@ -1,0 +1,67 @@
+#readingWorkspace { display: flex; position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: hidden; }
+#readingWorkspace > #viewport { min-width: 0; }
+#readerSidebar { display: flex; flex-direction: column; flex: 0 0 296px; width: 296px; min-width: 0; min-height: 0; border-right: 1px solid var(--line); background: var(--paper); z-index: 15; font-size: 12px; }
+body[data-view="library"] #readerSidebar { display: none; }
+.reader-sidebar-heading { display: flex; justify-content: space-between; align-items: center; padding: 13px 16px 6px; }
+.reader-sidebar-heading strong { font-size: 13px; font-weight: 600; }
+.reader-sidebar-heading > button { min-height: 28px; padding: 0 5px; font-size: 22px; line-height: 1; }
+.reader-tabs { display: flex; gap: 3px; margin: 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.reader-tabs > button { min-height: 31px; flex: 1; padding: 4px 5px; border-color: transparent; background: transparent; font-size: 12px; white-space: nowrap; }
+.reader-tabs > button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
+.reader-panel { flex: 1; min-height: 0; padding: 14px 16px 24px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.reader-hint { margin: 0 0 12px; color: var(--muted); line-height: 1.8; font-size: 11px; overflow-wrap: anywhere; }
+.reader-error { color: var(--danger); }
+.reader-outline ul { margin: 0; padding: 0; list-style: none; }
+.reader-outline ul ul { margin-left: 13px; padding-left: 7px; border-left: 1px solid var(--line); }
+.reader-outline-row { display: flex; align-items: flex-start; gap: 2px; }
+.reader-outline-row > button { background: transparent; border-color: transparent; border-radius: 5px; color: var(--ink); }
+.reader-outline-expand { flex: 0 0 20px; width: 20px; min-height: 30px; padding: 0; font-size: 18px; }
+.reader-outline-expand[aria-expanded="true"] { rotate: 90deg; }
+.reader-outline-expand:disabled { visibility: hidden; }
+.reader-outline-jump { flex: 1; min-width: 0; min-height: 30px; justify-content: flex-start; padding: 6px 4px; text-align: left; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+.reader-outline-jump:disabled { opacity: .7; cursor: default; }
+.reader-search-form { display: flex; gap: 6px; margin-bottom: 10px; }
+.reader-search-form > input { min-height: 34px; padding: 5px 8px; font-size: 12px; }
+.reader-search-form > button { flex: 0 0 auto; min-height: 34px; padding: 4px 10px; font-size: 12px; }
+.reader-search-controls { display: flex; align-items: center; gap: 5px; margin-bottom: 8px; }
+.reader-search-controls > button { min-height: 28px; padding: 3px 9px; font-size: 12px; }
+.reader-search-controls > button:last-child { margin-left: auto; }
+.reader-result-position { padding: 0 5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.reader-panel progress { margin: 2px 0 9px; }
+.reader-results, .reader-bookmarks { margin: 0; padding: 0; list-style: none; }
+.reader-results li { margin-bottom: 7px; }
+.reader-result { width: 100%; min-width: 0; display: block; padding: 10px 11px; text-align: left; background: var(--panel); border-color: var(--line); line-height: 1.6; }
+.reader-result strong { display: block; margin-bottom: 5px; color: var(--accent); font-size: 11px; font-weight: 500; }
+.reader-result.active { border-color: var(--accent); }
+.reader-excerpt { display: block; overflow-wrap: anywhere; font-size: 11px; }
+.reader-excerpt mark { padding: 0 1px; border-radius: 2px; color: var(--ink); background: #f2ca6780; }
+::highlight(reader-find) { background-color: #e9bd55a8; color: transparent; }
+::highlight(reader-find-active) { background-color: #ed9437cc; color: transparent; }
+.reader-find-layer { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.reader-find-box { position: absolute; background: #e9bd5580; border-radius: 2px; }
+.reader-find-box.active { background: #ed9437a8; }
+body:not([data-document-mode="original"]) .reader-find-layer { display: none; }
+.reader-bookmark-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px; }
+.reader-bookmark-actions button { min-height: 31px; padding: 5px 9px; font-size: 11px; }
+.reader-bookmark-actions button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.reader-note-heading { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+.reader-note-heading label { font-size: 12px; font-weight: 500; }
+.reader-note-heading button { padding: 2px 4px; min-height: 24px; font-size: 10px; }
+#readerNote { display: block; min-height: 110px; max-height: 40vh; padding: 9px; font-size: 12px; }
+.reader-note-meta { display: flex; justify-content: space-between; gap: 7px; margin: 6px 0; color: var(--muted); font-size: 10px; }
+.reader-note-meta > span:last-child { flex: 0 0 auto; }
+.reader-save-retry { min-height: 28px; margin-bottom: 6px; padding: 3px 9px; font-size: 11px; }
+.reader-storage-hint { padding-bottom: 15px; margin: 0 0 15px; border-bottom: 1px solid var(--line); font-size: 10px; }
+.reader-bookmark-filter { margin-bottom: 9px; min-height: 32px !important; padding: 5px 8px !important; font-size: 11px; }
+.reader-bookmark-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.reader-bookmark-jump { display: block; width: 100%; padding: 0; text-align: left; border-color: transparent; background: transparent; }
+.reader-bookmark-jump:hover { background: transparent; }
+.reader-bookmark-jump strong { display: block; color: var(--accent); font-weight: 500; font-size: 12px; }
+.reader-bookmark-jump span { display: block; margin-top: 4px; overflow-wrap: anywhere; font-size: 11px; color: var(--muted); }
+.reader-bookmark-row-actions { display: flex; gap: 4px; margin-top: 5px; }
+.reader-bookmark-row-actions button { min-height: 24px; padding: 2px 5px; font-size: 10px; }
+@media (max-width: 900px) { #readerSidebar { flex-basis: 272px; width: 272px; } }
+@media (max-width: 720px) {
+  #readerSidebar { position: absolute; inset: 0 auto 0 0; width: min(304px, calc(100% - 36px)); flex-basis: auto; box-shadow: 10px 0 28px #17291e20; z-index: 25; }
+  .reader-panel { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+}

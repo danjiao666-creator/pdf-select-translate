@@ -1,20 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <title>PDF 划词翻译 · 设置</title>
-    <link rel="stylesheet" href="options.css" />
-  </head>
-  <body>
-    <div class="wrap">
-      <h1><span class="brand">译</span> PDF 划词翻译 · 设置</h1>
-
-      <section class="card">
-        <h2>翻译引擎</h2>
-        <div class="grid">
-          <label>
-            <span>目标语言</span>
-            <select id="targetLang">
+<html lang="zh-CN"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>文献翻译器 · 设置</title><link rel="stylesheet" href="ui.css" /><link rel="stylesheet" href="options.css" /></head>
+<body>
+  <header class="settings-header"><div class="identity"><span class="brand">译</span><span>文献翻译器</span></div><a class="btn-link" href="viewer.html">返回阅读器 ↗</a></header>
+  <main class="settings-layout"><aside><h1>设置</h1><nav aria-label="设置导航"><a href="#translation">翻译偏好</a><a href="#api">自定义 API</a><a href="#interaction">阅读交互</a><a href="#help">快捷键与帮助</a></nav><span class="aside-note">修改后自动保存</span></aside>
+  <div class="settings-content">
+    <section class="card" id="translation"><div class="section-heading"><span class="section-number">01</span><div><h2>翻译偏好</h2><p>设置目标语言、源语言和翻译引擎。</p></div></div><div class="grid three"><label><span>目标语言</span><select id="targetLang">
               <option value="zh-CN">简体中文</option>
               <option value="zh-TW">繁體中文</option>
               <option value="en">English</option>
@@ -24,11 +14,7 @@
               <option value="de">Deutsch</option>
               <option value="es">Español</option>
               <option value="ru">Русский</option>
-            </select>
-          </label>
-          <label>
-            <span>源语言</span>
-            <select id="sourceLang">
+            </select></label><label><span>源语言</span><select id="sourceLang">
               <option value="auto">自动检测</option>
               <option value="en">English</option>
               <option value="zh-CN">简体中文</option>
@@ -37,120 +23,32 @@
               <option value="fr">Français</option>
               <option value="de">Deutsch</option>
               <option value="es">Español</option>
-            </select>
-          </label>
-          <label>
-            <span>引擎</span>
-            <select id="engine">
-              <option value="auto">自动（依次尝试）</option>
+            </select></label><label><span>翻译引擎</span><select id="engine">
+              <option value="auto">自动 · 速度与质量兼顾</option>
               <option value="google">Google 免费接口</option>
               <option value="microsoft">Microsoft 免费接口</option>
               <option value="youdao">有道演示接口（免费）</option>
               <option value="mymemory">MyMemory（免费）</option>
               <option value="custom">自定义 OpenAI 兼容 API</option>
-            </select>
-          </label>
-        </div>
-        <p class="muted small">
-          「自动」= 配了自定义 API 就优先用它，否则依次尝试 Google → Microsoft。
-          免费接口无需 Key，但在部分网络环境（例如中国大陆直连 Google）可能不可达；
-          此时建议配置 DeepSeek 等 OpenAI 兼容接口。
-        </p>
-      </section>
-
-      <section class="card">
-        <h2>自定义 OpenAI 兼容 API</h2>
-        <div class="grid">
-          <label class="wide">
-            <span>接口地址（Base URL）</span>
-            <input id="customBaseUrl" type="text" placeholder="https://api.deepseek.com/v1" />
-          </label>
-          <label class="wide">
-            <span>API Key</span>
-            <input id="customApiKey" type="password" placeholder="sk-..." autocomplete="off" />
-          </label>
-          <label>
-            <span>模型</span>
-            <input id="customModel" type="text" placeholder="deepseek-chat" list="modelSuggestions" />
-            <datalist id="modelSuggestions">
-              <option value="deepseek-chat">推荐：不带思考，首字约 0.4 秒</option>
-              <option value="deepseek-reasoner">带思考，明显更慢</option>
-              <option value="deepseek-flash">实测比 deepseek-chat 慢很多，不推荐</option>
-            </datalist>
-          </label>
-          <label>
-            <span>思考模式（影响速度）</span>
-            <select id="thinkingPreset">
+            </select></label></div><p class="note">自动模式按实测速度选择免费引擎；配置 API 后，可先显示快速译文，再流式优化。</p></section>
+    <section class="card" id="api"><div class="section-heading"><span class="section-number">02</span><div><h2>自定义 API</h2><p>接入 DeepSeek 或其他 OpenAI 兼容服务。</p></div><span id="apiState" class="badge">未配置</span></div><div class="grid"><label class="wide"><span>接口地址 <span class="muted">/ Base URL</span></span><input id="customBaseUrl" type="url" placeholder="https://api.deepseek.com/v1" autocomplete="off" /></label><label class="wide"><span>API Key</span><div class="key-row"><input id="customApiKey" type="password" placeholder="输入 API Key" autocomplete="new-password" /><button id="clearKey" class="quiet" title="清除浏览器内保存的 Key；本地文件不受影响">清除</button></div></label><label><span>模型名称</span><input id="customModel" type="text" placeholder="deepseek-chat" list="modelSuggestions" /><datalist id="modelSuggestions"><option value="deepseek-chat"></option><option value="deepseek-reasoner"></option></datalist></label></div><p id="keySource" class="note" hidden></p><p id="modelHint" class="note" hidden></p>
+    <details class="advanced"><summary>高级请求配置 <span class="muted">提示词 · 思考模式 · JSON</span></summary><div class="advanced-body"><label><span>思考模式</span><select id="thinkingPreset">
               <option value="">保持默认（不改请求）</option>
               <option value='{"enable_thinking":false}'>关闭思考 · 通义/Qwen 等</option>
               <option value='{"reasoning_effort":"low"}'>思考强度最低 · OpenAI 兼容</option>
               <option value='{"thinking":{"type":"disabled"}}'>关闭思考 · 部分网关</option>
-            </select>
-          </label>
-        </div>
-        <p id="keySource" class="muted small" hidden></p>
-        <p id="modelHint" class="muted small" hidden></p>
-        <label class="wide block">
-          <span>额外请求参数（JSON，会合并进请求体）</span>
-          <textarea id="customExtraBody" rows="2" placeholder='例如 {"enable_thinking": false}'></textarea>
-        </label>
-        <p class="muted small">
-          <strong>速度提示：</strong>DeepSeek 的思考版是 <code>deepseek-reasoner</code>，出结果明显更慢；
-          翻译用 <code>deepseek-chat</code> 就行（实测约 1~2 秒/句）。
-          其它模型若默认带思考，用上面的预设关掉或调低即可。
-        </p>
-        <label class="wide block">
-          <span>系统提示词（<code>{target}</code> 会替换成目标语言）</span>
-          <textarea id="customPrompt" rows="3"></textarea>
-        </label>
-        <div class="row">
-          <button id="save" class="primary">保存</button>
-          <button id="test">测试翻译</button>
-          <button id="speedTest" title="并发测一遍所有可用引擎，把最快的设为固定引擎（以后不再逐个试探）">⚡ 测速并选用最快引擎</button>
-          <span id="testResult" class="muted small"></span>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>交互</h2>
-        <label class="check"><input type="checkbox" id="autoTranslate" /> 选中后立即翻译（关闭则先显示「译」小按钮）</label>
-        <label class="check"><input type="checkbox" id="fastFirst" /> 「先秒出、再升级」：免费引擎先出译文（约 0.2 秒），随后用自定义 API 的结果自动替换</label>
-        <label class="check"><input type="checkbox" id="sentenceMode" /> 自动把划选片段扩展到完整句子</label>
-        <label class="check"><input type="checkbox" id="autoOpenPdf" /> 点击 .pdf 链接时自动用自带阅读器打开</label>
-        <label class="check"><input type="checkbox" id="clipboardWatch" /> 在 Chrome/Edge 内置 PDF 阅读器里监听剪贴板（Ctrl+C 后自动翻译）</label>
-        <label class="inline">
-          <span>译文卡片字号</span>
-          <input id="cardFontSize" type="number" min="11" max="24" step="1" />
-          px
-        </label>
-      </section>
-
-      <section class="card">
-        <h2>快捷键</h2>
-        <p class="muted small" id="shortcutList">读取中…</p>
-        <p class="muted small">
-          修改快捷键请打开 <code>chrome://extensions/shortcuts</code>（Edge 为 <code>edge://extensions/shortcuts</code>）。
-          在内置 PDF 阅读器里只有快捷键能触发翻译，右键菜单不会出现。
-        </p>
-      </section>
-
-      <section class="card">
-        <h2>怎么用（推荐流程）</h2>
-        <ol class="small">
-          <li>在网页上打开 PDF → 点扩展图标 →「用翻译阅读器打开本 PDF」。</li>
-          <li>在自带阅读器里直接用鼠标划选句子，松手即出译文；可开启「整句」自动补全句子边界。</li>
-          <li>本地文件：把 PDF 拖进阅读器窗口，或点「打开本地 PDF」。本地文件不受跨域限制，最稳。</li>
-          <li>也可以在任何普通网页上划词翻译（同一套引擎与设置）。</li>
-        </ol>
-        <p class="muted small">
-          为什么需要自带阅读器？Chrome/Edge 内置的 PDF 阅读器由插件渲染，网页脚本拿不到选区、
-          也收不到鼠标事件，扩展只能靠快捷键 + 剪贴板间接工作。自带阅读器基于本地打包的 pdf.js，
-          文字层完全可访问，才能真正「选中即翻译」。
-        </p>
-      </section>
-
-      <p id="status" class="status muted small"></p>
-    </div>
-    <script src="options.js"></script>
-  </body>
-</html>
+            </select></label><label><span>额外请求参数（JSON 对象）</span><textarea id="customExtraBody" rows="3" spellcheck="false" placeholder='例如 {"enable_thinking":false}'></textarea></label><label><span>系统提示词 <span class="muted">/ {target} 自动替换为目标语言</span></span><textarea id="customPrompt" rows="4"></textarea></label></div></details>
+    <div class="row actions"><button id="save" class="primary">保存设置</button><button id="test">测试当前引擎</button><button id="speedTest" class="quiet">测速</button></div><div id="testResult" class="test-result" role="status" hidden></div></section>
+    <section class="card" id="interaction"><div class="section-heading"><span class="section-number">03</span><div><h2>阅读交互</h2><p>设置外观、划词触发方式和字号。</p></div></div>
+      <label class="setting-row"><span><strong>界面外观</strong><small>PDF 页面保持原色，不会反转论文图表。</small></span><select id="theme" class="theme-select"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+      <label class="setting-row"><span><strong>选中即译</strong><small>关闭后，选中文字先显示「译」按钮。</small></span><input type="checkbox" id="autoTranslate" /></label>
+      <label class="setting-row"><span><strong>快速译文 + AI 优化</strong><small>先用免费引擎显示译文，再替换为自定义 API 结果；选中文字会发送到参与竞速的服务。</small></span><input type="checkbox" id="fastFirst" /></label>
+      <label class="setting-row"><span><strong>自动补全整句</strong><small>将选区扩展到所在句子的边界。</small></span><input type="checkbox" id="sentenceMode" /></label>
+      <label class="setting-row extension-only"><span><strong>自动打开 PDF</strong><small>打开 .pdf 链接时使用翻译阅读器。</small></span><input type="checkbox" id="autoOpenPdf" /></label>
+      <label class="setting-row extension-only"><span><strong>内置阅读器剪贴板监听</strong><small>仅在浏览器内置 PDF 页面聚焦时检查剪贴板变化并翻译，默认关闭。</small></span><input type="checkbox" id="clipboardWatch" /></label>
+      <label class="setting-row"><span><strong>译文字号</strong><small>同时应用于阅读器和网页翻译卡片。</small></span><span class="size-control"><input id="cardFontSize" type="number" min="11" max="24" step="1" aria-label="译文字号" /> px</span></label>
+    </section>
+    <section class="card help-card" id="help"><div class="section-heading"><span class="section-number">04</span><div><h2>快捷键与帮助</h2><p>查看快捷键、数据说明和使用限制。</p></div></div><p><kbd>Ctrl+O</kbd> 打开 PDF　<kbd>Ctrl+F</kbd> 查找文章　<kbd>Ctrl+D</kbd> 书签　<kbd>Ctrl+0</kbd> 适宽　<kbd>Ctrl+Home / End</kbd> 首尾页　<kbd>Esc</kbd> 关闭面板</p><p id="shortcutList">读取中…</p><p class="note extension-only">在浏览器扩展快捷键页面修改：<code>chrome://extensions/shortcuts</code> 或 <code>edge://extensions/shortcuts</code>。</p><details class="advanced"><summary>使用提示与隐私</summary><div class="advanced-body"><p>本地文件：拖入阅读器，或选择「打开 PDF」，支持一次导入多份文件。扫描件暂不支持文字翻译与全文搜索；有密码的文件每次重新打开都需输入密码。</p><p class="extension-only">Chrome / Edge 内置 PDF 阅读器无法直接提供选区。推荐用本阅读器；也可先 Ctrl+C，再使用扩展弹窗中的剪贴板翻译。</p><p>文章对话需要可用的自定义 AI 接口；仅发送问题、必要的历史和检索到的文章片段，不默认上传整份 PDF。AI 的回答与引用都需要核对原文，不能替代学术判断。</p><p>文档库、译文、笔记与对话保存在本机，可在文档库备份和恢复。插件版与应用版使用各自的数据目录，通过备份迁移。不含云同步、遥测或自动更新下载。</p><p>划词快速模式可能把选中文字发送给多个免费翻译服务。不希望发送给免费服务时，请选择「自定义 API」并关闭「快速译文 + AI 优化」。</p><p>API Key 不会回显或写入分发包。应用版使用系统加密保存凭据；插件版凭据受浏览器个人资料保护。文档备份为未加密 ZIP，含原文和对话，不包含 API 设置或密钥，请勿随意转发。</p></div></details></section>
+    <footer>文献翻译器 <span id="settingsLocation">设置自动保存在当前浏览器</span></footer>
+  </div></main><div id="status" class="status" role="status" aria-live="polite"></div><script src="desktop-platform.js"></script><script src="appearance.js"></script><script src="options.js"></script>
+</body></html>

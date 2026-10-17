@@ -3,33 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PDF 划词翻译</title>
+    <title>文献翻译器</title>
+    <link rel="stylesheet" href="ui.css" />
     <link rel="stylesheet" href="viewer.css" />
+    <link rel="stylesheet" href="reader-tools.css" />
+    <link rel="stylesheet" href="article-chat.css" />
   </head>
   <body>
     <header class="toolbar">
-      <div class="tb-group tb-doc">
-        <span class="brand" title="PDF 划词翻译">译</span>
-        <span class="docname" id="docName">未打开文件</span>
+      <div class="document-bar">
+        <div class="tb-doc"><span class="brand" aria-hidden="true">译</span><div class="document-title"><div class="eyebrow">文献翻译器</div><span class="docname" id="docName">文档库</span></div></div>
+        <div class="document-actions"><button id="openLibrary">文档库</button><a id="openOriginal" class="btn-link" target="_blank" rel="noreferrer" hidden>原始文件 ↗</a><button id="openLocal">打开 PDF</button><button id="openOptions" class="quiet" title="扩展设置">设置</button></div>
+        <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple hidden />
       </div>
-
-      <div class="tb-group">
-        <button id="prevPage" class="icon" title="上一页 (PageUp / ←)">‹</button>
-        <input id="pageInput" class="page-input" type="text" inputmode="numeric" value="1" />
-        <span class="muted">/ <span id="pageCount">-</span></span>
-        <button id="nextPage" class="icon" title="下一页 (PageDown / →)">›</button>
-      </div>
-
-      <div class="tb-group">
-        <button id="zoomOut" class="icon" title="缩小 (Ctrl+-)">−</button>
-        <span id="zoomLabel" class="muted zoom-label">100%</span>
-        <button id="zoomIn" class="icon" title="放大 (Ctrl+=)">+</button>
-        <button id="fitWidth" class="active" title="适应宽度">适宽</button>
-      </div>
-
-      <div class="tb-group">
-        <label class="field">译成
-          <select id="targetLang">
+      <div class="reading-bar">
+        <div class="tb-group page-nav" aria-label="页面导航"><button id="prevPage" class="icon quiet" title="上一页 (PageUp / ←)" aria-label="上一页">‹</button><input id="pageInput" class="page-input" aria-label="当前页码" type="text" inputmode="numeric" value="1" /><span class="muted page-total">/ <span id="pageCount">—</span></span><button id="nextPage" class="icon quiet" title="下一页 (PageDown / →)" aria-label="下一页">›</button></div>
+        <div class="tb-group zoom-controls" aria-label="缩放"><button id="zoomOut" class="icon quiet" title="缩小 (Ctrl+-)" aria-label="缩小">−</button><span id="zoomLabel" class="zoom-label">100%</span><button id="zoomIn" class="icon quiet" title="放大 (Ctrl+=)" aria-label="放大">+</button><button id="fitWidth" class="active" title="适合宽度 (Ctrl+0)">适宽</button><button id="fitPage" class="quiet" title="显示完整一页">整页</button></div>
+        <div class="tb-group reader-tool-buttons" aria-label="阅读工具"><button id="openOutline" class="quiet" disabled title="文章目录">目录</button><button id="openSearch" class="quiet" disabled title="查找全文 (Ctrl+F)">查找</button><button id="openBookmarks" class="quiet" disabled title="书签与笔记">笔记</button><button id="addBookmark" class="quiet" disabled title="收藏当前页 (Ctrl+D)">书签</button></div>
+        <button id="openArticleChat" disabled title="结合文章内容与 AI 讨论">AI 对话</button>
+        <button id="openFullTranslation" class="primary" disabled>全文翻译</button>
+        <details class="translation-menu"><summary><span class="menu-dot"></span>翻译偏好 <span class="muted">⌄</span></summary><div class="preference-panel"><div class="eyebrow">TRANSLATION</div><label class="field">目标语言<select id="targetLang">
             <option value="zh-CN">简体中文</option>
             <option value="zh-TW">繁體中文</option>
             <option value="en">English</option>
@@ -39,68 +32,66 @@
             <option value="de">Deutsch</option>
             <option value="es">Español</option>
             <option value="ru">Русский</option>
-          </select>
-        </label>
-        <label class="field">引擎
-          <select id="engine">
+          </select></label><label class="field">翻译引擎<select id="engine">
             <option value="auto">自动</option>
             <option value="google">Google（免费）</option>
             <option value="microsoft">Microsoft（免费）</option>
             <option value="youdao">有道（免费）</option>
             <option value="mymemory">MyMemory（免费）</option>
             <option value="custom">自定义 API</option>
-          </select>
-        </label>
-        <label class="chk" title="把划选的片段自动扩展到完整句子">
-          <input type="checkbox" id="sentenceMode" checked /> 整句
-        </label>
-        <label class="chk" title="选中后立刻翻译（关闭则先显示“译”按钮）">
-          <input type="checkbox" id="autoTranslate" checked /> 选中即译
-        </label>
+          </select></label><label class="chk"><span>自动补全整句</span><input type="checkbox" id="sentenceMode" checked /></label><label class="chk"><span>选中后立即翻译</span><input type="checkbox" id="autoTranslate" checked /></label><p class="muted small">高级 API 配置在「设置」中调整。</p></div></details>
       </div>
-
-      <div class="tb-group tb-right">
-        <button id="openLocal">打开本地 PDF</button>
-        <a id="openOriginal" class="btn-link" target="_blank" rel="noreferrer" hidden>原始文件</a>
-        <button id="openOptions" title="扩展设置">设置</button>
-        <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden />
+      <div id="documentTranslationBar" class="document-translation-bar" hidden>
+        <div class="mode-switch" role="group" aria-label="文档显示模式"><button data-mode="original" class="active">原文</button><button data-mode="translated">译文</button><button data-mode="compare">双栏对照</button></div>
+        <div class="translation-progress"><span id="documentTranslationStatus" role="status"></span><progress id="documentTranslationProgress" max="1" value="0" aria-label="全文翻译进度"></progress></div>
+        <button id="pauseDocumentTranslation" hidden>暂停</button><button id="resumeDocumentTranslation" hidden>继续翻译</button><button id="retryTranslationSave" hidden>重试保存</button><button id="exportTranslationText" disabled title="导出已完成的段落对照；未完成全文时也可导出">导出文字</button><button id="exportTranslatedPdf" disabled>导出译文 PDF</button>
+        <div id="documentTranslationError" class="document-translation-error" role="alert" hidden></div>
       </div>
     </header>
 
+    <div id="readingWorkspace">
+    <aside id="readerSidebar" hidden aria-label="阅读工具"></aside>
     <main id="viewport">
       <div id="pages"></div>
 
-      <section id="empty" class="empty">
-        <h1>PDF 划词翻译</h1>
-        <p>把 PDF 拖到这里，或者选择本地文件开始。<strong>选中任意句子即可即时翻译。</strong></p>
-        <div class="empty-actions">
-          <button id="emptyPick" class="primary">选择本地 PDF</button>
-          <button id="emptyClose">收起</button>
-        </div>
-        <p class="muted small">
-          提示：在普通标签页里打开 PDF 时，点扩展图标 →「用翻译阅读器打开本 PDF」，即可获得真正的划词翻译体验。
-        </p>
+      <section id="empty" class="library-view">
+        <div class="library-heading"><div><h1>文档库</h1><p>PDF、译文、笔记与对话保存在本机，下次直接继续。</p></div><div class="library-actions"><button id="emptyClose" hidden>继续阅读</button><button id="emptyPick" class="primary" title="可一次选择多份 PDF">导入 PDF</button></div></div>
+        <div id="libraryError" class="library-error" role="alert" hidden></div>
+        <div class="library-tools"><input id="librarySearch" type="search" placeholder="搜索文档名称" aria-label="搜索文档" /><select id="librarySort" aria-label="文档排序"><option value="recent">最近阅读</option><option value="added">最近导入</option><option value="name">文档名称</option></select><span id="libraryCount" class="muted small"></span></div>
+        <div id="libraryList" class="library-list"></div>
+        <div id="libraryEmpty" class="library-empty" hidden><strong>暂无文档</strong><p>将 PDF 拖入窗口，或点击「导入 PDF」。打开过的文件会自动加入文档库。</p></div>
+        <div class="library-maintenance"><div><select id="backupScope" aria-label="备份范围"><option value="">全部文档</option></select><button id="exportLibrary" title="备份本机文档、译文、笔记和对话，不含 API Key">备份</button><button id="importLibrary">恢复备份</button></div><span id="libraryStorage" class="muted small"></span></div>
+        <input id="backupInput" type="file" accept=".zip,application/zip" hidden />
+        <p id="libraryTransferStatus" class="muted small" role="status"></p>
+        <p class="library-storage-note">文件不自动上传。翻译和对话时，相关文字才发送到你配置的服务。卸载、清除应用数据或浏览器数据会删除文档库，请定期备份。备份为未加密 ZIP，请妥善保管；密码 PDF 不保存密码。</p>
       </section>
     </main>
-
-    <div id="status" class="status" hidden></div>
-
-    <div id="card" class="pt-card" hidden>
-      <div class="pt-head">
-        <span class="pt-badge" id="cardBadge">…</span>
-        <span class="pt-title" id="cardTitle">划词翻译</span>
-        <button class="pt-act" id="cardRetry" title="重新翻译">重译</button>
-        <button class="pt-act" id="cardCopy">复制</button>
-        <button class="pt-act" id="cardClose" title="关闭 (Esc)">✕</button>
-      </div>
-      <div class="pt-body">
-        <div class="pt-src" id="cardSrc"></div>
-        <div class="pt-out" id="cardOut"></div>
-      </div>
+    <aside id="articleChatPanel" hidden aria-label="文章 AI 对话"></aside>
     </div>
 
-    <div id="toast" class="toast" hidden></div>
+    <dialog id="fullTranslationDialog" class="tool-dialog"><form method="dialog"><div class="dialog-heading"><h2>全文翻译</h2><button class="quiet" aria-label="关闭全文翻译设置">×</button></div></form>
+      <p id="fullTranslationSummary"></p><ul class="translation-notes"><li>识别分栏与段落，按原页面位置排入译文；AI 翻译会参考标题、摘要和相邻段落。</li><li>公式、细小图内标签、旋转文字和扫描页保留原文。无法安全排版的段落不强行覆盖或缩成小字，点击虚线区域查看完整译文。</li><li>仅发送文字及必要的上下文，不上传 PDF 文件；使用付费 API 会产生用量费用。免费引擎不具备文档上下文能力，专业文献建议选择 AI。</li><li>支持暂停、继续和失败重试；暂停后已发出的请求可能继续计费。旧版译文不会沿用到新的排版流程。</li></ul>
+      <p id="fullTranslationError" class="error-text" role="alert" hidden></p><div class="dialog-actions"><button id="startDocumentTranslation" class="primary">开始全文翻译</button></div>
+    </dialog>
+    <dialog id="paragraphDialog" class="tool-dialog"><form method="dialog"><div class="dialog-heading"><h2>段落对照</h2><button class="quiet" aria-label="关闭段落对照">×</button></div></form><div class="section-label">原文</div><p id="paragraphSource" class="paragraph-text"></p><div class="section-label translation-label">译文</div><p id="paragraphTranslation" class="paragraph-text"></p><div class="dialog-actions"><button id="copyParagraph">复制译文</button></div></dialog>
+    <dialog id="exportDialog" class="tool-dialog"><form method="dialog"><div class="dialog-heading"><h2>导出译文 PDF</h2><button class="quiet" aria-label="关闭导出说明">×</button></div></form><p>按原页面尺寸导出，保留图表和译文位置。为保证中文字体一致，页面以高清图像写入 PDF，导出后不能再次划词或搜索。</p><p>无法排版的段落、公式和扫描页保留原文。原文件不作修改。</p><p id="exportStatus" role="status"></p><div class="dialog-actions"><button id="confirmExport" class="primary">下载 PDF</button></div></dialog>
+    <dialog id="renameDocumentDialog" class="tool-dialog"><form id="renameDocumentForm"><div class="dialog-heading"><h2>重命名文档</h2><button type="button" class="quiet" data-close-dialog="renameDocumentDialog" aria-label="取消重命名">×</button></div><label for="renameInput">文档名称</label><input id="renameInput" maxlength="500" required autocomplete="off" /><p class="muted small">只修改文档库中的名称，不修改磁盘原文件。</p><div class="dialog-actions"><button type="button" data-close-dialog="renameDocumentDialog">取消</button><button type="submit" class="primary">保存</button></div></form></dialog>
+    <dialog id="passwordDialog" class="tool-dialog"><form id="passwordForm"><div class="dialog-heading"><h2>打开受保护的 PDF</h2><button type="button" class="quiet" data-close-dialog="passwordDialog" aria-label="取消打开">×</button></div><label id="passwordLabel" for="pdfPassword">请输入 PDF 密码</label><input id="pdfPassword" type="password" autocomplete="off" required /><p class="muted small">密码仅用于本次打开，不保存、不上传。</p><div class="dialog-actions"><button type="button" data-close-dialog="passwordDialog">取消</button><button type="submit" class="primary">打开 PDF</button></div></form></dialog>
+    <dialog id="closeAppDialog" class="tool-dialog"><form method="dialog"><div class="dialog-heading"><h2>仍有任务进行中</h2></div><p>关闭后，全文翻译会暂停，对话生成和导出会停止。已保存的译文、笔记和对话不会丢失。已发送的 API 请求可能仍会计费。</p><div class="dialog-actions"><button value="cancel">继续使用</button><button value="close" class="primary">保存并关闭</button></div></form></dialog>
+    <dialog id="unsavedDataDialog" class="tool-dialog"><form method="dialog"><div class="dialog-heading"><h2>有记录尚未保存</h2></div><p id="unsavedDataReason"></p><p>建议返回当前文档，重试保存，或先导出译文文字、笔记和对话。现在离开，未保存的修改可能丢失。</p><div class="dialog-actions"><button value="cancel" class="primary" autofocus>返回文档</button><button value="discard">仍然离开</button></div></form></dialog>
 
+    <div id="status" class="status" role="status" hidden></div>
+
+    <div id="card" class="pt-card" role="region" aria-label="划词翻译结果" hidden>
+      <div class="pt-head"><span class="pt-badge" id="cardBadge">翻译中</span><span class="pt-title" id="cardTitle">划词翻译</span><button class="pt-act" id="cardClose" title="关闭 (Esc)" aria-label="关闭译文">×</button></div>
+      <div class="pt-body"><div class="section-label">原文</div><div class="pt-src" id="cardSrc"></div><div class="section-label translation-label">译文</div><div class="pt-out" id="cardOut" aria-live="polite"></div></div>
+      <div class="pt-footer"><span class="muted small">Esc 关闭</span><div><button class="pt-act" id="cardAsk" title="将这段原文带入文章对话">问 AI</button><button class="pt-act" id="cardRetry" title="重新请求翻译">重译</button><button class="pt-act copy-action" id="cardCopy">复制译文</button></div></div>
+    </div>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+
+    <script src="desktop-platform.js"></script>
+    <script src="appearance.js"></script>
     <script type="module" src="viewer.js"></script>
   </body>
 </html>

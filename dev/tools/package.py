@@ -11,8 +11,8 @@ import zipfile
 EXT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # repo root = extension root
 WS = os.path.dirname(EXT)
 
-SKIP_DIRS = {".git", "__pycache__", "node_modules", "dev"}
-SKIP_FILES = {".DS_Store", "Thumbs.db", "config.local.json", ".gitignore", ".gitattributes"}
+INCLUDE_DIRS = {"src", "vendor", "icons", "docs"}
+INCLUDE_FILES = {"manifest.json", "README.md", "LICENSE", "config.local.example.json", "open-reader.cmd", "open-reader.ps1"}
 
 
 def main():
@@ -23,9 +23,12 @@ def main():
     count = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for root, dirs, files in os.walk(EXT):
-            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            if root == EXT:
+                dirs[:] = [d for d in dirs if d in INCLUDE_DIRS]
+            else:
+                dirs[:] = [d for d in dirs if d not in {"node_modules", "__pycache__", ".git"}]
             for name in sorted(files):
-                if name in SKIP_FILES:
+                if (root == EXT and name not in INCLUDE_FILES) or name.endswith(".test-bak") or (name.startswith("config.local") and name != "config.local.example.json"):
                     continue
                 full = os.path.join(root, name)
                 rel = os.path.relpath(full, EXT).replace(os.sep, "/")

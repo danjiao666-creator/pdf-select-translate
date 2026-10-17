@@ -1,0 +1,72 @@
+{
+  "name": "paper-translator-desktop",
+  "version": "1.3.0",
+  "description": "Local PDF reader, translation and article discussion",
+  "private": true,
+  "license": "MIT",
+  "author": "PDF Translate contributors",
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "desktop": "node desktop/dev.mjs",
+    "desktop:dir": "electron-builder --win --x64 --dir",
+    "desktop:build": "electron-builder --win nsis --x64 && node desktop/package.mjs",
+    "test:desktop": "node --test dev/test/desktop-unit.mjs && node dev/test/desktop.mjs",
+    "desktop:portable": "electron-builder --win --x64 --dir && node desktop/package.mjs",
+    "test:desktop:package": "node dev/test/desktop-package.mjs"
+  },
+  "devDependencies": {
+    "electron": "44.8.0",
+    "electron-builder": "26.15.3",
+    "yazl": "3.3.1"
+  },
+  "build": {
+    "appId": "org.papertranslator.reader",
+    "productName": "文献翻译器",
+    "copyright": "Copyright © 2026 PDF Translate contributors",
+    "asar": true,
+    "directories": {
+      "output": "dist/desktop"
+    },
+    "files": [
+      "desktop/main.cjs",
+      "desktop/preload.cjs",
+      "desktop/backend.mjs",
+      "desktop/security.cjs",
+      "desktop/secure-store.cjs",
+      "desktop/LICENSES.txt",
+      "src/**",
+      "vendor/**",
+      "icons/icon.ico",
+      "icons/icon128.png",
+      "LICENSE",
+      "manifest.json",
+      "package.json",
+      "!**/*.test-bak",
+      "!**/*.map",
+      "!**/config.local.json",
+      "!**/node_modules/**"
+    ],
+    "win": {
+      "icon": "icons/icon.ico",
+      "target": [
+        "nsis"
+      ],
+      "executableName": "PaperTranslator"
+    },
+    "artifactName": "PaperTranslator-${version}-${arch}.${ext}",
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "文献翻译器",
+      "artifactName": "PaperTranslator-Setup-${version}-${arch}.${ext}",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "include": "desktop/installer.nsh"
+    }
+  }
+}

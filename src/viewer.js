@@ -12,6 +12,10 @@
  */
 
 import * as pdfjsLib from '../vendor/pdf.min.mjs';
+import { createDocumentTools } from './document-tools.mjs';
+import { library } from './library.mjs';
+import { createReaderTools } from './reader-tools.mjs';
+import { createArticleChat } from './article-chat.mjs';
 
 const WORKER_URL = chrome.runtime.getURL('vendor/pdf.worker.min.mjs');
 const CMAP_URL = chrome.runtime.getURL('vendor/cmaps/');
@@ -59,7 +63,9 @@ const state = {
   numPages: 0,
   scale: 1,
   fit: true,
+  fitMode: 'width',
   currentPage: 1,
+  documentMode: 'original',
   gen: 0,
   entries: new Map(),
   pages: new Map(),
@@ -112,13 +118,21 @@ function syncToolbarFromSettings() {
   if (s.engine) els.engine.value = s.engine;
   els.sentenceMode.checked = Boolean(s.sentenceMode);
   els.autoTranslate.checked = Boolean(s.autoTranslate);
-  els.card.style.fontSize = `${Number(s.cardFontSize) || 15}px`;
+  els.card.style.setProperty('--translation-size', `${clamp(Number(s.cardFontSize) || 15, 11, 24)}px`);
 }
 
 function patchSettings(patch) {
   state.settings = { ...state.settings, ...patch };
   sendMsg({ type: 'saveSettings', settings: patch });
 }
+
+chrome.storage.onChanged.addListener(async (changes, area) => {
+  if (area !== 'local' || !changes.settings) return;
+  await loadSettings();
+  closeCard();
+  await documentTools.settingsChanged();
+  articleChat.settingsChanged();
+});
 
 /* ------------------------------------------------------------------ 状态 */
 
@@ -195,6 +209,8 @@ function buildLayerModel(layer) {
   const map = [];
   let text = '';
   let prevTop = null;
+  let prevRight = null;
+  let prevHeight = 0;
   const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT, null);
   let node = walker.nextNode();
   while (node) {
@@ -202,13 +218,18 @@ function buildLayerModel(layer) {
     if (value) {
       const parent = node.parentElement;
       const top = parent ? parent.offsetTop : 0;
+      const bounds = parent?.getBoundingClientRect();
       if (map.length && prevTop !== null && !sameLine(prevTop, top) && !/\s$/.test(text)) {
+        text += Math.abs(top - prevTop) > Math.max(bounds?.height || 0, prevHeight) * 1.8 ? '\n\n' : '\n';
+      } else if (bounds && prevRight !== null && bounds.left - prevRight > 2 && !/\s$/.test(text) && !/^\s/.test(value)) {
         text += ' ';
       }
       const start = text.length;
       text += value;
       map.push({ node, start, end: text.length, top });
       prevTop = top;
+      prevRight = bounds?.right ?? null;
+      prevHeight = bounds?.height || 0;
     }
     node = walker.nextNode();
   }
@@ -255,10 +276,10 @@ function isSentenceBoundary(text, index) {
   const ch = text[index];
   if (!ch) return false;
   if ('。！？!?；;'.includes(ch)) return true;
-  if (ch === '\n' || ch === '\r') return true;
+  if (ch === '\n') return text[index - 1] === '\n' || text[index + 1] === '\n';
   if (ch === '.' || ch === '!' || ch === '?') {
     const next = text[index + 1];
-    return next === undefined || /\s/.test(next);
+    return (next === undefined || /\s/.test(next)) && !/\b(?:Dr|Mr|Mrs|Ms|Prof|Fig|Eq|et al|vs)\.$/i.test(text.slice(0, index + 1));
   }
   return false;
 }
@@ -278,28 +299,30 @@ function expandRangeToSentence(range) {
   if (selStart < 0 || selEnd < 0 || selEnd <= selStart) return null;
 
   let from = selStart;
+  let foundStart = false;
   const backLimit = Math.max(0, selStart - MAX_EXPAND);
   for (let i = selStart - 1; i >= backLimit; i--) {
     if (isSentenceBoundary(text, i)) {
       from = i + 1;
+      foundStart = true;
       break;
     }
   }
-  if (from === selStart) {
+  if (!foundStart) {
     // 附近没有句读：退一步，至少补全当前这一行
-    const start = lineStartOffset(model, selStart);
+    const start = backLimit === 0 ? 0 : lineStartOffset(model, selStart);
     if (start < selStart) from = start;
   }
 
   let to = selEnd;
   const forwardLimit = Math.min(text.length, selEnd + MAX_EXPAND);
-  for (let i = selEnd; i < forwardLimit; i++) {
+  for (let i = selEnd; !isSentenceBoundary(text, selEnd - 1) && i < forwardLimit; i++) {
     if (isSentenceBoundary(text, i)) {
       to = i + 1;
       break;
     }
   }
-  if (to === selEnd) {
+  if (to === selEnd && !isSentenceBoundary(text, selEnd - 1)) {
     const end = lineEndOffset(model, selEnd);
     if (end > selEnd) to = end;
   }
@@ -319,9 +342,21 @@ function expandRangeToSentence(range) {
   } catch (_) {
     return null;
   }
-  const out = cleanText(expanded.toString());
+  const out = cleanText(model.text.slice(from, to));
   if (!out || out.length > 600) return null;
   return { range: expanded, text: out };
+}
+
+function textFromRange(range) {
+  const pieces = [];
+  for (const layer of els.pages.querySelectorAll('.textLayer')) {
+    if (!range.intersectsNode(layer)) continue;
+    const model = buildLayerModel(layer);
+    const start = layer.contains(range.startContainer) ? offsetOfPoint(model, range.startContainer, range.startOffset) : 0;
+    const end = layer.contains(range.endContainer) ? offsetOfPoint(model, range.endContainer, range.endOffset) : model.text.length;
+    if (start >= 0 && end > start) pieces.push(model.text.slice(start, end));
+  }
+  return cleanText(pieces.join('\n') || range.toString());
 }
 
 /* --------------------------------------------------------------- 文字层 */
@@ -329,40 +364,30 @@ function expandRangeToSentence(range) {
 function buildTextLayer(textContent, viewport) {
   const layer = document.createElement('div');
   layer.className = 'textLayer';
-  const frag = document.createDocumentFragment();
-  const spans = [];
-
+  const context = document.createElement('canvas').getContext('2d');
   for (const item of textContent.items) {
-    if (!item || typeof item.str !== 'string' || item.str.length === 0) continue;
+    if (!item || typeof item.str !== 'string' || !item.str) continue;
+    const style = textContent.styles[item.fontName] || {};
     const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
     const fontHeight = Math.hypot(tx[2], tx[3]);
     if (!fontHeight) continue;
-    const angle = Math.atan2(tx[1], tx[0]);
-
+    let angle = Math.atan2(tx[1], tx[0]);
+    if (style.vertical) angle += Math.PI / 2;
+    const ascent = fontHeight * (style.ascent ?? (style.descent ? 1 + style.descent : 0.8));
     const span = document.createElement('span');
-    span.textContent = item.str === ' ' ? '\u00a0' : item.str;
-    span.style.left = `${tx[4]}px`;
-    span.style.top = `${tx[5] - fontHeight}px`;
+    span.textContent = item.str;
+    span.dir = item.dir || 'ltr';
+    const family = style.fontFamily || 'sans-serif';
+    span.style.left = `${tx[4] + ascent * Math.sin(angle)}px`;
+    span.style.top = `${tx[5] - ascent * Math.cos(angle)}px`;
     span.style.fontSize = `${fontHeight}px`;
-    span.style.fontFamily = 'sans-serif';
-    if (angle) span.style.transform = `rotate(${angle}rad)`;
-    span.dataset.tw = String((item.width || 0) * viewport.scale);
-    frag.appendChild(span);
-    spans.push(span);
-  }
-
-  layer.appendChild(frag);
-
-  // 布局完成后校正宽度，让选区贴合 PDF 原文
-  for (const span of spans) {
-    const target = Number(span.dataset.tw);
-    const measured = span.offsetWidth;
-    if (!target || !measured) continue;
-    const k = target / measured;
-    if (Math.abs(k - 1) > 0.02) {
-      const rot = span.style.transform;
-      span.style.transform = `${rot ? `${rot} ` : ''}scaleX(${k.toFixed(4)})`;
-    }
+    span.style.fontFamily = family;
+    context.font = `${fontHeight}px ${family}`;
+    const measured = context.measureText(item.str).width;
+    const target = (style.vertical ? item.height : item.width) * viewport.scale;
+    span.dataset.tw = String(target);
+    span.style.transform = `rotate(${angle}rad) scaleX(${measured && target ? target / measured : 1})`;
+    layer.appendChild(span);
   }
   return layer;
 }
@@ -377,6 +402,8 @@ async function getPage(n) {
 }
 
 function makeEntry(n) {
+  const row = document.createElement('div');
+  row.className = 'page-row';
   const container = document.createElement('div');
   container.className = 'page';
   container.dataset.page = String(n);
@@ -386,6 +413,7 @@ function makeEntry(n) {
   container.appendChild(ph);
   const entry = {
     n,
+    row,
     container,
     canvas: null,
     layer: null,
@@ -396,7 +424,8 @@ function makeEntry(n) {
   };
   state.entries.set(n, entry);
   applySize(entry);
-  els.pages.appendChild(container);
+  row.appendChild(container);
+  els.pages.appendChild(row);
   io.observe(container);
   return entry;
 }
@@ -433,26 +462,42 @@ async function ensureSize(n) {
     const vp = page.getViewport({ scale: 1 });
     entry.w = vp.width;
     entry.h = vp.height;
-    if (!entry.rendered) applySize(entry);
-  } catch (_) {}
+    if (state.entries.get(n) === entry && !entry.rendered) applySize(entry);
+  } catch (_) { entry.sizeKnown = false; }
+}
+
+function nearViewport(entry) {
+  const viewport = els.viewport.getBoundingClientRect();
+  const rect = entry.container.getBoundingClientRect();
+  return entry.container.isConnected && rect.bottom > viewport.top - 900 && rect.top < viewport.bottom + 900;
 }
 
 function queueRender(n) {
   const entry = state.entries.get(n);
-  if (!entry || entry.rendered || entry.rendering || pending.has(n)) return;
-  pending.add(n);
+  if (!entry || entry.rendered || pending.has(entry)) return;
+  pending.add(entry);
   (async () => {
-    while (activeRenders >= MAX_CONCURRENT) await sleep(50);
+    while (activeRenders >= MAX_CONCURRENT) await sleep(30);
+    if (state.entries.get(n) !== entry) { pending.delete(entry); return; }
     activeRenders++;
+    let failed = false;
     try {
-      await renderPage(n);
-    } catch (err) {
-      const ph = entry.container.querySelector('.placeholder');
-      if (ph) ph.textContent = `第 ${n} 页渲染失败：${err && err.message ? err.message : err}`;
-      entry.rendering = false;
+      do {
+        const generation = state.gen;
+        try { await renderPage(n); }
+        catch (err) {
+          if (generation === state.gen && err?.name !== 'RenderingCancelledException') {
+            failed = true;
+            const ph = entry.container.querySelector('.placeholder');
+            if (ph) ph.textContent = `第 ${n} 页渲染失败，请重新打开文件`;
+          }
+        }
+        if (failed || state.entries.get(n) !== entry || entry.rendered || !nearViewport(entry)) break;
+        await sleep(0);
+      } while (true);
     } finally {
       activeRenders--;
-      pending.delete(n);
+      pending.delete(entry);
     }
   })();
 }
@@ -472,8 +517,9 @@ async function renderPage(n) {
     entry.h = vp1.height;
     entry.sizeKnown = true;
 
-    const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
     const viewport = page.getViewport({ scale: state.scale });
+    // Bound backing canvases when zooming; several 5x pages otherwise exhaust RAM.
+    const dpr = Math.min(2, Math.sqrt(12000000 / (viewport.width * viewport.height)), 8192 / Math.max(viewport.width, viewport.height));
     const canvas = document.createElement('canvas');
     canvas.width = Math.max(1, Math.floor(viewport.width * dpr));
     canvas.height = Math.max(1, Math.floor(viewport.height * dpr));
@@ -499,6 +545,9 @@ async function renderPage(n) {
     entry.layer = layer;
     entry.rendered = true;
     applySize(entry);
+    documentTools.decorate(entry);
+    readerTools.decorate(entry);
+    void addPdfLinks(page, viewport, entry, gen);
     trimRendered();
   } finally {
     entry.rendering = false;
@@ -507,11 +556,14 @@ async function renderPage(n) {
 
 function trimRendered() {
   const rendered = [...state.entries.values()].filter((e) => e.rendered);
-  if (rendered.length <= MAX_RENDERED) return;
-  rendered
-    .sort((a, b) => Math.abs(b.n - state.currentPage) - Math.abs(a.n - state.currentPage))
-    .slice(0, rendered.length - MAX_RENDERED)
-    .forEach((entry) => unrender(entry));
+  let pixels = rendered.reduce((sum, entry) => sum + entry.canvas.width * entry.canvas.height, 0);
+  rendered.sort((a, b) => Math.abs(b.n - state.currentPage) - Math.abs(a.n - state.currentPage));
+  let remaining = rendered.length;
+  for (const entry of rendered) {
+    if (remaining <= MAX_RENDERED && pixels <= 42000000) break;
+    if (entry.n === state.currentPage) continue;
+    pixels -= entry.canvas.width * entry.canvas.height; remaining--; unrender(entry);
+  }
 }
 
 function unrender(entry) {
@@ -520,8 +572,10 @@ function unrender(entry) {
     if (entry.task && entry.task.cancel) entry.task.cancel();
   } catch (_) {}
   entry.rendered = false;
+  for (const canvas of entry.row.querySelectorAll('canvas')) canvas.width = canvas.height = 0;
   entry.canvas = null;
   entry.layer = null;
+  entry.row.querySelector('.original-reference')?.remove();
   const ph = document.createElement('div');
   ph.className = 'placeholder';
   ph.textContent = `第 ${entry.n} 页`;
@@ -531,6 +585,8 @@ function unrender(entry) {
 
 async function destroyCurrent() {
   state.gen++;
+  closeCard();
+  hideFloatButton();
   io.disconnect();
   for (const entry of state.entries.values()) {
     try {
@@ -540,55 +596,65 @@ async function destroyCurrent() {
   state.entries.clear();
   state.pages.clear();
   els.pages.replaceChildren();
-  if (state.pdf) {
-    try {
-      await state.pdf.destroy();
-    } catch (_) {}
-  }
+  const previousPdf = state.pdf;
   state.pdf = null;
   state.numPages = 0;
   els.pageCount.textContent = '-';
   els.pageInput.value = '1';
   els.docName.textContent = '未打开文件';
   state.currentPage = 1;
+  if (previousPdf) {
+    try { await previousPdf.destroy(); } catch (_) {}
+  }
 }
 
-async function setupDocument(pdf, name) {
+async function setupDocument(pdf, name, sequence) {
   state.pdf = pdf;
   state.numPages = pdf.numPages;
   els.docName.textContent = name || 'document.pdf';
   els.docName.title = name || '';
   els.pageCount.textContent = String(pdf.numPages);
   els.empty.hidden = true;
+  documentTools.showReader();
 
   const first = await getPage(1);
+  if (sequence !== loadSequence) return;
   const vp = first.getViewport({ scale: 1 });
   state.defaultW = vp.width;
   state.defaultH = vp.height;
 
   io.disconnect();
   buildPlaceholders(pdf.numPages);
-  applyScale(fitScale(), true);
+  const zoom = Number(state.settings.defaultZoom);
+  applyScale(zoom > 0 ? zoom : fitScale(), !(zoom > 0));
   goToPage(1, false);
   prefetchSizes(1);
 }
 
 function fitScale() {
-  const available = els.viewport.clientWidth - 36;
-  return clamp(available / state.defaultW, 0.25, 4);
+  let available = Math.min(1080, els.viewport.clientWidth - 48);
+  if (state.documentMode === 'compare') available = (available - 24) / 2;
+  const width = available / state.defaultW;
+  return clamp(state.fitMode === 'page' ? Math.min(width, (els.viewport.clientHeight - 58) / state.defaultH) : width, 0.25, 4);
 }
 
 function applyScale(scale, keepFit) {
+  const anchor = state.entries.get(state.currentPage);
+  const relative = anchor ? (els.viewport.scrollTop - anchor.container.offsetTop) / Math.max(1, anchor.container.offsetHeight) : 0;
   state.scale = clamp(scale, 0.25, 5);
   state.fit = Boolean(keepFit);
-  els.fitWidth.classList.toggle('active', state.fit);
+  els.fitWidth.classList.toggle('active', state.fit && state.fitMode !== 'page');
+  $('fitPage').classList.toggle('active', state.fit && state.fitMode === 'page');
   els.zoomLabel.textContent = `${Math.round(state.scale * 100)}%`;
   state.gen++;
 
+  closeCard();
   for (const entry of state.entries.values()) {
+    try { entry.task?.cancel(); } catch (_) {}
     if (entry.rendered) unrender(entry);
     else applySize(entry);
   }
+  if (anchor) els.viewport.scrollTop = anchor.container.offsetTop + relative * anchor.container.offsetHeight;
   const vpRect = els.viewport.getBoundingClientRect();
   for (const entry of state.entries.values()) {
     const r = entry.container.getBoundingClientRect();
@@ -597,11 +663,14 @@ function applyScale(scale, keepFit) {
 }
 
 function goToPage(n, smooth = true) {
-  const target = clamp(Math.round(n), 1, Math.max(1, state.numPages));
+  const target = clamp(Math.round(Number(n) || 1), 1, Math.max(1, state.numPages));
   const entry = state.entries.get(target);
   if (!entry) return;
   state.currentPage = target;
+  queueRender(target);
+  prefetchSizes(target);
   els.pageInput.value = String(target);
+  readerTools.pageChanged();
   entry.container.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
 }
 
@@ -619,54 +688,116 @@ async function prefetchSizes(from) {
 
 /* ---------------------------------------------------------------- 打开 PDF */
 
-async function openUrl(url, name) {
+let loadSequence = 0;
+let loadingTask = null;
+async function openDocument(source, name, url = '', saved = null) {
+  const sequence = ++loadSequence;
+  const leave = await flushBeforeLeave();
+  if (!leave || sequence !== loadSequence) return false;
+  try { await documentTools.beforeClose({ discard: leave === 'discard' }); }
+  catch (error) { toast(error.message); return false; }
+  closeDocumentDialogs();
+  await Promise.all([readerTools.beforeClose(), articleChat.beforeClose()]);
+  if (sequence !== loadSequence) return;
+  const previousTask = loadingTask;
+  loadingTask = null;
+  if (previousTask) await previousTask.destroy().catch(() => {});
+  if (sequence !== loadSequence) return;
   await destroyCurrent();
+  if (sequence !== loadSequence) return;
+  $('libraryError').hidden = true;
+  els.empty.hidden = true;
   setStatus('正在加载 PDF…');
-  const task = pdfjsLib.getDocument({
-    url,
-    withCredentials: true,
-    cMapUrl: CMAP_URL,
-    cMapPacked: true,
-    standardFontDataUrl: STD_FONTS_URL,
-    onPassword: (callback, reason) => {
-      const message = reason === 2 ? '密码错误，请重新输入 PDF 密码：' : '该 PDF 需要密码：';
-      const pwd = window.prompt(message, '');
-      if (pwd === null) callback(null);
-      else callback(pwd);
-    }
-  });
-  task.onProgress = (p) => {
-    if (p && p.total) setStatus(`正在加载 PDF… ${Math.round((p.loaded / p.total) * 100)}%`);
-    else if (p && p.loaded) setStatus(`正在加载 PDF… ${Math.round(p.loaded / 1024)} KB`);
+  const task = pdfjsLib.getDocument({ ...source, cMapUrl: CMAP_URL, cMapPacked: true, standardFontDataUrl: STD_FONTS_URL });
+  loadingTask = task;
+  let cancelled = false;
+  task.onPassword = async (callback, reason) => {
+    if (sequence !== loadSequence) return;
+    const label = reason === 2 ? '密码错误，请重新输入：' : '请输入 PDF 密码：';
+    const password = window.desktopBridge ? await askPdfPassword(label, sequence) : window.prompt(label, '');
+    if (sequence !== loadSequence) return;
+    if (password === null) {
+      cancelled = true;
+      task.destroy().catch(() => {});
+      if (sequence === loadSequence) { void documentTools.showLibrary(); setStatus(null); }
+    } else callback(password);
+  };
+  task.onProgress = (progress) => {
+    if (sequence !== loadSequence || cancelled) return;
+    if (progress.total) setStatus(`正在加载 PDF… ${Math.min(100, Math.round(progress.loaded / progress.total * 100))}%`);
   };
   try {
     const pdf = await task.promise;
-    await setupDocument(pdf, name || guessName(url));
-    setStatus(null);
+    if (sequence !== loadSequence) { await pdf.destroy(); return; }
+    state.fileUrl = url;
+    els.openOriginal.hidden = !url;
+    if (url) els.openOriginal.href = url;
+    await setupDocument(pdf, name, sequence);
+    if (sequence !== loadSequence) return;
+    await documentTools.loaded(pdf, name, url, saved, () => sequence === loadSequence);
+    if (sequence !== loadSequence) return;
+    const record = documentTools.getCurrent();
+    await Promise.all([readerTools.loaded(record), articleChat.loaded(record)]);
+    if (sequence !== loadSequence) return;
+    if (sequence === loadSequence) setStatus(null);
+    return sequence === loadSequence;
   } catch (err) {
-    setStatus(null);
+    if (sequence !== loadSequence || cancelled) return false;
     showLoadError(err, url);
+    return false;
+  } finally {
+    if (loadingTask === task) loadingTask = null;
   }
 }
 
-async function openData(data, name) {
-  await destroyCurrent();
-  setStatus('正在解析文件…');
+function openUrl(url, name) {
+  return openDocument({ url, withCredentials: true }, name || guessName(url), url);
+}
+function openData(data, name, saved = null) {
+  return openDocument({ data }, name || '本地文件.pdf', saved?.sourceUrl || '', saved);
+}
+
+async function askPdfPassword(label, sequence) {
+  const dialog = $('passwordDialog');
+  if (dialog.open) dialog.close('cancel');
+  $('passwordLabel').textContent = label; $('pdfPassword').value = '';
+  const value = new Promise((resolve) => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'open' && sequence === loadSequence ? $('pdfPassword').value : null), { once: true });
+  });
+  dialog.showModal(); $('pdfPassword').focus();
+  return value;
+}
+
+async function addPdfLinks(page, viewport, entry, generation) {
   try {
-    const pdf = await pdfjsLib.getDocument({
-      data,
-      cMapUrl: CMAP_URL,
-      cMapPacked: true,
-      standardFontDataUrl: STD_FONTS_URL
-    }).promise;
-    state.fileUrl = '';
-    els.openOriginal.hidden = true;
-    await setupDocument(pdf, name || '本地文件.pdf');
-    setStatus(null);
-  } catch (err) {
-    setStatus(null);
-    showLoadError(err, '');
-  }
+    const annotations = await page.getAnnotations({ intent: 'display' });
+    if (generation !== state.gen || !entry.rendered || state.entries.get(entry.n) !== entry) return;
+    const layer = document.createElement('div'); layer.className = 'pdf-link-layer';
+    for (const item of annotations) {
+      if (item.subtype !== 'Link' || !Array.isArray(item.rect)) continue;
+      const external = typeof item.url === 'string' && /^(https?:|mailto:)/i.test(item.url);
+      if (!external && !item.dest) continue;
+      const box = viewport.convertToViewportRectangle(item.rect);
+      const link = document.createElement(external ? 'a' : 'button'); link.className = 'pdf-link';
+      if (external) { link.href = item.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.title = item.url; }
+      else {
+        link.type = 'button'; link.title = '跳转到引用位置';
+        link.addEventListener('click', async () => {
+          const pdf = state.pdf;
+          try {
+            const dest = typeof item.dest === 'string' ? await pdf.getDestination(item.dest) : item.dest;
+            if (!Array.isArray(dest) || pdf !== state.pdf) return;
+            const index = typeof dest[0] === 'number' ? dest[0] : await pdf.getPageIndex(dest[0]);
+            if (pdf === state.pdf) goToPage(index + 1, false);
+          } catch (_) { toast('无法定位此链接'); }
+        });
+      }
+      link.setAttribute('aria-label', link.title);
+      Object.assign(link.style, { left: `${Math.min(box[0], box[2])}px`, top: `${Math.min(box[1], box[3])}px`, width: `${Math.abs(box[2] - box[0])}px`, height: `${Math.abs(box[3] - box[1])}px` });
+      layer.append(link);
+    }
+    entry.container.querySelector('.pdf-link-layer')?.remove(); entry.container.append(layer);
+  } catch (_) { /* A broken annotation must not prevent reading its page. */ }
 }
 
 function guessName(url) {
@@ -681,12 +812,8 @@ function guessName(url) {
 
 function showLoadError(err, url) {
   const message = err && err.message ? err.message : String(err);
-  els.empty.hidden = false;
-  els.empty.querySelector('h1').textContent = '无法打开这个 PDF';
-  els.empty.querySelector('p').innerHTML =
-    `原因：<code>${escapeHtml(message)}</code><br />` +
-    '常见情况：需要登录/带 Cookie 才能下载、被服务器拒绝跨域读取、或者链接已失效。<br />' +
-    '你仍然可以用「选择本地 PDF」把文件拖进来（本地文件一定能翻译）。';
+  void documentTools.showLibrary();
+  documentTools.showLibraryError(`无法打开 PDF：${message}。可下载文件后重新导入；扫描版 PDF 暂不支持文字翻译。`);
   setStatus(`加载失败：${message}`, true);
   if (url) {
     els.openOriginal.hidden = false;
@@ -706,6 +833,15 @@ let requestSeq = 0;
 let currentRequestKey = '';
 let lastText = '';
 let lastRect = null;
+let streamed = false;
+let provisionalResult = null;
+let upgradeResult = null;
+
+function closeCard() {
+  requestSeq++;
+  currentRequestKey = '';
+  els.card.hidden = true;
+}
 
 function ensureFloatButton() {
   if (floatBtn) return floatBtn;
@@ -766,6 +902,7 @@ function showCard(text, rect) {
 }
 
 function setCardLoading() {
+  els.cardOut.dataset.copy = '';
   els.cardBadge.textContent = '翻译中…';
   els.cardTitle.textContent = '划词翻译';
   els.cardOut.className = 'pt-out loading';
@@ -801,6 +938,7 @@ function applyStream(msg) {
     return;
   }
   if (typeof msg.text !== 'string' || !msg.text) return;
+  streamed = true;
   els.cardOut.className = 'pt-out';
   els.cardOut.textContent = msg.text;
   els.cardOut.dataset.copy = msg.text;
@@ -811,6 +949,7 @@ function applyStream(msg) {
 /** 自定义 API 的升级结果到了：替换卡片内容（只认当前这次请求） */
 function applyUpgrade(msg) {
   if (!msg || !currentRequestKey || msg.requestId !== currentRequestKey) return;
+  upgradeResult = msg;
   if (msg.ok) {
     els.cardBadge.textContent = msg.engineLabel
       ? `${msg.engineLabel}${msg.elapsedMs ? ` · ${(msg.elapsedMs / 1000).toFixed(1)}s` : ''}`
@@ -820,19 +959,28 @@ function applyUpgrade(msg) {
     els.cardOut.textContent = msg.translation;
     els.cardOut.dataset.copy = msg.translation;
   } else {
+    if (provisionalResult) setCardResult({ ...provisionalResult, provisional: false });
     els.cardBadge.textContent = `${els.cardBadge.textContent.replace(/ · AI 优化中…$/, '')} · 优化失败`;
   }
   placeCard(lastRect);
 }
 
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (!msg) return false;
+  if (msg.type === 'translate-selection') {
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if (!range || selection.isCollapsed) { sendResponse({ ok: false, error: '没有选中的文本' }); return false; }
+    const expanded = state.settings.sentenceMode ? expandRangeToSentence(range) : null;
+    translateNow(expanded?.text || textFromRange(range), range.getBoundingClientRect()).then(() => sendResponse({ ok: true }));
+    return true;
+  }
   if (msg.type === 'translate-upgrade') applyUpgrade(msg);
   else if (msg.type === 'translate-stream') applyStream(msg);
   return false;
 });
 
-async function translateNow(text, rect) {
+async function translateNow(text, rect, refresh = false) {
   const payload = cleanText(text);
   if (!payload) {
     toast('没有检测到可翻译的文本');
@@ -841,6 +989,9 @@ async function translateNow(text, rect) {
   lastText = payload;
   lastRect = rect || lastRect;
   const id = ++requestSeq;
+  streamed = false;
+  provisionalResult = null;
+  upgradeResult = null;
   currentRequestKey = `r${id}-${Date.now()}`;
   showCard(payload, lastRect);
   setCardLoading();
@@ -850,10 +1001,14 @@ async function translateNow(text, rect) {
     to: state.settings.targetLang,
     from: state.settings.sourceLang,
     engine: state.settings.engine,
-    requestId: currentRequestKey
+    requestId: currentRequestKey,
+    refresh
   });
   if (id !== requestSeq) return;
-  setCardResult(res);
+  if (res?.provisional) provisionalResult = res;
+  if (upgradeResult) {
+    if (!upgradeResult.ok) { setCardResult({ ...res, provisional: false }); applyUpgrade(upgradeResult); }
+  } else if (!(res?.provisional && streamed)) setCardResult(res);
 }
 
 /* -------------------------------------------------------------- 划词交互 */
@@ -871,7 +1026,8 @@ function onSelectionMouseUp(event) {
     }
     const range = sel.getRangeAt(0);
     const inLayer = Boolean(closestOf(currentNode(range.startContainer), '.textLayer'));
-    let text = cleanText(sel.toString());
+    if (!inLayer) return;
+    let text = textFromRange(range);
     let rect = range.getBoundingClientRect();
     if (!rect || !rect.width) {
       const rects = range.getClientRects();
@@ -902,22 +1058,27 @@ function onSelectionMouseUp(event) {
 }
 
 document.addEventListener('mouseup', onSelectionMouseUp, true);
+document.addEventListener('click', (event) => {
+  const menu = document.querySelector('.translation-menu');
+  if (menu.open && !menu.contains(event.target)) menu.open = false;
+});
 
 document.addEventListener(
   'mousedown',
   (event) => {
     if (closestOf(event.target, '#card') || event.target === floatBtn) return;
     hideFloatButton();
-    if (!els.card.hidden) els.card.hidden = true;
+    if (!els.card.hidden) closeCard();
   },
   true
 );
 
 document.addEventListener('keydown', (event) => {
+  if (document.querySelector('dialog[open]') || document.body.dataset.view === 'library') return;
   const tag = (event.target && event.target.tagName) || '';
   const typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
   if (event.key === 'Escape') {
-    els.card.hidden = true;
+    closeCard();
     hideFloatButton();
     return;
   }
@@ -928,6 +1089,12 @@ document.addEventListener('keydown', (event) => {
   } else if (event.ctrlKey && event.key === '-') {
     event.preventDefault();
     applyScale(state.scale - 0.15, false);
+  } else if (event.ctrlKey && event.key === '0') {
+    event.preventDefault(); state.fitMode = 'width'; applyScale(fitScale(), true);
+  } else if (event.ctrlKey && event.key === 'Home') {
+    event.preventDefault(); goToPage(1, false);
+  } else if (event.ctrlKey && event.key === 'End') {
+    event.preventDefault(); goToPage(state.numPages, false);
   } else if (event.key === 'PageDown' || event.key === 'ArrowRight') {
     goToPage(state.currentPage + 1);
   } else if (event.key === 'PageUp' || event.key === 'ArrowLeft') {
@@ -955,7 +1122,8 @@ els.pageInput.addEventListener('keydown', (e) => {
 });
 els.zoomIn.addEventListener('click', () => applyScale(state.scale + 0.15, false));
 els.zoomOut.addEventListener('click', () => applyScale(state.scale - 0.15, false));
-els.fitWidth.addEventListener('click', () => applyScale(fitScale(), true));
+els.fitWidth.addEventListener('click', () => { state.fitMode = 'width'; applyScale(fitScale(), true); });
+$('fitPage').addEventListener('click', () => { state.fitMode = 'page'; applyScale(fitScale(), true); });
 window.addEventListener('resize', () => {
   if (state.fit && state.pdf) applyScale(fitScale(), true);
 });
@@ -968,9 +1136,9 @@ els.autoTranslate.addEventListener('change', () => patchSettings({ autoTranslate
 els.openOptions.addEventListener('click', () => chrome.runtime.openOptionsPage());
 els.openLocal.addEventListener('click', () => els.fileInput.click());
 els.emptyPick.addEventListener('click', () => els.fileInput.click());
-els.emptyClose.addEventListener('click', () => (els.empty.hidden = true));
-els.cardClose.addEventListener('click', () => (els.card.hidden = true));
-els.cardRetry.addEventListener('click', () => translateNow(lastText, lastRect));
+els.cardClose.addEventListener('click', closeCard);
+$('cardAsk').addEventListener('click', () => articleChat.openFromSelection(lastText, state.currentPage));
+els.cardRetry.addEventListener('click', () => translateNow(lastText, lastRect, true));
 els.cardCopy.addEventListener('click', async () => {
   const text = els.cardOut.dataset.copy || '';
   if (!text) return;
@@ -982,34 +1150,65 @@ els.cardCopy.addEventListener('click', async () => {
   }
 });
 
+let importing = false;
+async function importFiles(input) {
+  const files = [...input];
+  if (!files.length) return;
+  if (importing) { toast('正在导入，请稍候'); return; }
+  importing = true;
+  let added = 0; const failures = [];
+  try {
+    if (files.length > 100) throw new Error('每次最多导入 100 份 PDF');
+    if (files.reduce((total, file) => total + file.size, 0) > 512 * 1048576) throw new Error('单次导入最多 512 MB，请分批导入');
+    for (const file of files) {
+      if (!/\.pdf$/i.test(file.name) && !/pdf/i.test(file.type || '')) { failures.push(`${file.name}：不是 PDF`); continue; }
+      if (file.size > 200 * 1048576) { failures.push(`${file.name}：超过单文件 200 MB 限制`); continue; }
+      try {
+        const data = new Uint8Array(await file.arrayBuffer());
+        if (!added) {
+          const opened = await openData(data, file.name);
+          if (!opened || !state.pdf) { failures.push(`${file.name}：未打开`); continue; }
+        } else {
+          const task = pdfjsLib.getDocument({ data, cMapUrl: CMAP_URL, cMapPacked: true, standardFontDataUrl: STD_FONTS_URL });
+          // Background imports cannot ask for a password while another PDF is open.
+          task.onPassword = () => { void task.destroy(); };
+          let pdf;
+          try {
+            pdf = await task.promise;
+            await library.importPdf(await pdf.getData(), { name: file.name, numPages: pdf.numPages, sourceUrl: '' });
+          } finally { await (pdf ? pdf.destroy() : task.destroy()).catch(() => {}); }
+        }
+        added++;
+      } catch (error) { failures.push(`${file.name}：${/password|destroyed|密码/i.test(error.message) ? '受密码保护，请单独打开' : error.message}`); }
+    }
+    if (files.length > 1 || failures.length) {
+      toast(`已处理 ${added} 份 PDF${failures.length ? `，${failures.length} 份未导入` : ''}；重复文件自动合并。`, 6500);
+      if (failures.length) documentTools.showLibraryError(failures.slice(0, 5).join('；'));
+    }
+    void navigator.storage?.persist?.().catch(() => {});
+    if (document.body.dataset.view === 'library') await documentTools.refreshLibrary();
+  } catch (error) { toast(`导入失败：${error.message}`); }
+  finally { importing = false; }
+}
 els.fileInput.addEventListener('change', async () => {
-  const file = els.fileInput.files && els.fileInput.files[0];
-  if (!file) return;
-  const buf = await file.arrayBuffer();
-  await openData(buf, file.name);
-  els.fileInput.value = '';
+  const files = [...els.fileInput.files];
+  try { await importFiles(files); }
+  finally { els.fileInput.value = ''; }
 });
 
 /* 拖拽本地 PDF */
 ['dragenter', 'dragover'].forEach((type) =>
   document.addEventListener(type, (e) => {
+    if (!e.dataTransfer?.types?.includes('Files')) return;
     e.preventDefault();
-    els.empty.hidden = false;
-    els.empty.classList.add('dragover');
+    els.viewport.classList.add('dragover');
   })
 );
-document.addEventListener('dragleave', () => els.empty.classList.remove('dragover'));
+document.addEventListener('dragleave', (event) => { if (!event.relatedTarget) els.viewport.classList.remove('dragover'); });
 document.addEventListener('drop', async (e) => {
   e.preventDefault();
-  els.empty.classList.remove('dragover');
-  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (!file) return;
-  if (file.type && !/pdf/i.test(file.type) && !/\.pdf$/i.test(file.name)) {
-    toast('请拖入 PDF 文件');
-    return;
-  }
-  const buf = await file.arrayBuffer();
-  await openData(buf, file.name);
+  els.viewport.classList.remove('dragover');
+  if (e.dataTransfer?.files?.length) await importFiles(e.dataTransfer.files);
 });
 
 /* 当前页码跟随滚动 */
@@ -1017,10 +1216,11 @@ let scrollTicking = false;
 els.viewport.addEventListener(
   'scroll',
   () => {
-    if (scrollTicking || !state.pdf) return;
+    if (scrollTicking || !state.pdf || document.body.dataset.view === 'library') return;
     scrollTicking = true;
     requestAnimationFrame(() => {
       scrollTicking = false;
+      if (document.body.dataset.view === 'library') return;
       const top = els.viewport.getBoundingClientRect().top + 40;
       let best = state.currentPage;
       let bestDist = Infinity;
@@ -1036,6 +1236,7 @@ els.viewport.addEventListener(
       if (best !== state.currentPage) {
         state.currentPage = best;
         els.pageInput.value = String(best);
+        readerTools.pageChanged();
       }
     });
   },
@@ -1044,21 +1245,90 @@ els.viewport.addEventListener(
 
 /* ------------------------------------------------------------------ 启动 */
 
+const documentTools = createDocumentTools({ state, pdfjsLib, send: sendMsg, openData, goToPage, applyScale, fitScale, toast, closeCard,
+  onRemoved: async () => { closeDocumentDialogs(); await Promise.all([readerTools.beforeClose(), articleChat.beforeClose()]); await destroyCurrent(); $('emptyClose').hidden = true; } });
+const readerTools = createReaderTools({ state, library, goToPage, applyScale, fitScale, toast, closeCard });
+const articleChat = createArticleChat({ state, send: sendMsg, library, goToPage, toast, closeCard });
+state.flushReadingData = () => Promise.all([documentTools.flush(), readerTools.flush?.(), articleChat.flush?.()]);
+
+function closeDocumentDialogs() {
+  for (const id of ['fullTranslationDialog', 'paragraphDialog', 'exportDialog', 'renameDocumentDialog', 'passwordDialog', 'chatResetDialog']) {
+    const dialog = $(id);
+    if (dialog?.open) dialog.close('cancel');
+  }
+  $('pdfPassword').value = '';
+}
+
+async function flushBeforeLeave() {
+  try { await state.flushReadingData(); return 'saved'; }
+  catch (error) {
+    const dialog = $('unsavedDataDialog');
+    if (dialog.open) return false;
+    $('unsavedDataReason').textContent = `本地保存失败：${error.message || '请检查存储空间和应用权限。'}`;
+    const result = new Promise((resolve) => dialog.addEventListener('close', () => resolve(dialog.returnValue === 'discard' ? 'discard' : false), { once: true }));
+    dialog.showModal(); return result;
+  }
+}
+
+for (const button of document.querySelectorAll('[data-close-dialog]')) button.addEventListener('click', () => $(button.dataset.closeDialog).close('cancel'));
+$('passwordForm').addEventListener('submit', (event) => { event.preventDefault(); $('passwordDialog').close('open'); });
+document.addEventListener('keydown', (event) => {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || document.querySelector('dialog[open]')) return;
+  if (event.key.toLowerCase() === 'o') { event.preventDefault(); els.openLocal.click(); }
+});
+let nativeImports = Promise.resolve();
+window.addEventListener('desktop-open-pdf', (event) => {
+  nativeImports = nativeImports.catch(() => {}).then(() => importFiles([new File([event.detail.data], event.detail.name, { type: 'application/pdf' })]));
+});
+window.addEventListener('desktop-open-pdfs', (event) => {
+  nativeImports = nativeImports.catch(() => {}).then(() => importFiles(event.detail.files.map((file) => new File([file.data], file.name, { type: 'application/pdf' }))));
+});
+new ResizeObserver(() => {
+  if (!state.fit || !state.pdf || document.body.dataset.view === 'library') return;
+  const next = fitScale();
+  if (Math.abs(next - state.scale) > .005) applyScale(next, true);
+}).observe(els.viewport);
+
+if (window.desktopBridge) window.desktopBridge.onBeforeClose(async () => {
+  if (documentTools.isBusy() || articleChat.isBusy() || importing) {
+    const dialog = $('closeAppDialog');
+    if (dialog.open) return false;
+    const confirmed = new Promise((resolve) => dialog.addEventListener('close', () => resolve(dialog.returnValue === 'close'), { once: true }));
+    dialog.showModal();
+    if (!await confirmed) return false;
+  }
+  const leave = await flushBeforeLeave();
+  if (!leave) return false;
+  try { await documentTools.beforeClose({ discard: leave === 'discard' }); }
+  catch (error) { toast(error.message); return false; }
+  closeDocumentDialogs();
+  await Promise.all([readerTools.beforeClose(), articleChat.beforeClose()]);
+  return true;
+});
+else window.addEventListener('beforeunload', (event) => {
+  if (documentTools.isBusy() || documentTools.hasUnsaved() || articleChat.isBusy() || readerTools.hasUnsaved?.() || articleChat.hasUnsaved?.() || importing) { event.preventDefault(); event.returnValue = ''; }
+});
+
 async function boot() {
   await loadSettings();
   const params = new URLSearchParams(location.search);
   const file = params.get('file') || params.get('url');
   const page = Number(params.get('page') || '0');
-  if (file) {
+  const saved = params.get('document');
+  if (saved) {
+    await documentTools.openSaved(saved);
+    if (page > 1) goToPage(page, false);
+  } else if (file) {
     state.fileUrl = file;
     els.openOriginal.href = file;
     els.openOriginal.hidden = false;
     await openUrl(file, guessName(file));
     if (page > 1) goToPage(page, false);
   } else {
-    els.empty.hidden = false;
-    els.docName.textContent = '未打开文件';
+    await documentTools.showLibrary();
   }
 }
 
-boot();
+boot().catch((error) => { setStatus(`初始化失败：${error.message}`, true); }).finally(() => {
+  window.dispatchEvent(new Event('reader-ready')); window.desktopBridge?.ready?.();
+});

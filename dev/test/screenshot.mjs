@@ -1,131 +1,58 @@
-/**
- * 生成 README 用的截图：用自带阅读器打开示例 PDF，划选一句话，等真实的译文出现后截图。
- *
- * 需要扩展目录下有 config.local.json（真实 Key 会走自定义 API）；没有也能跑，
- * 只是译文来自免费引擎。
- *
- * 运行：cd dev && node test/screenshot.mjs
- * 输出：<repo>/docs/screenshot.png
- */
-
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const devDir = path.dirname(here);
-const extDir = path.dirname(devDir); // extension root
-const docsDir = path.join(extDir, 'docs');
-fs.mkdirSync(docsDir, { recursive: true });
-
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const PORT = 8793;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const pdfPath = path.join(devDir, 'tests', 'sample.pdf');
+import { launchExtension, screenshot } from './browser.mjs';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const configPath = path.join(root, 'config.local.json');
+const cfg = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : null;
 const server = http.createServer((req, res) => {
-  if ((req.url || '').split('?')[0] === '/sample.pdf') {
-    const buf = fs.readFileSync(pdfPath);
-    res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': buf.length });
-    res.end(buf);
-    return;
-  }
-  res.writeHead(404).end();
+  res.writeHead(200, { 'Content-Type': 'application/pdf' });
+  res.end(fs.readFileSync(path.join(root, 'dev/tests/sample.pdf')));
 });
-await new Promise((r) => server.listen(PORT, '127.0.0.1', r));
-
-const browser = await puppeteer.launch({
-  executablePath: EDGE,
-  headless: true,
-  args: [
-    `--disable-extensions-except=${extDir}`,
-    `--load-extension=${extDir}`,
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--force-device-scale-factor=1.5'
-  ]
-});
-
+await new Promise((r) => server.listen(0, '127.0.0.1', r));
+let harness;
 try {
-  const sw = await browser.waitForTarget((t) => t.type() === 'service_worker' && t.url().includes('background.js'), {
-    timeout: 20000
-  });
-  const extId = new URL(sw.url()).host;
+  harness = await launchExtension(root);
+  const { browser, id } = harness;
   const page = await browser.newPage();
-  await page.setViewport({ width: 1180, height: 760, deviceScaleFactor: 1.5 });
-
-  // 干净的开局：只留「整句 + 选中即译」，避免截图里出现无关状态
-  await page.goto(`chrome-extension://${extId}/src/options.html`, { waitUntil: 'domcontentloaded' });
-  await page.evaluate(
-    (settings) => new Promise((resolve) => chrome.storage.local.set({ settings }, resolve)),
-    {
-      engine: 'auto',
-      targetLang: 'zh-CN',
-      sourceLang: 'auto',
-      autoTranslate: true,
-      fastFirst: true,
-      sentenceMode: true,
-      autoOpenPdf: false,
-      clipboardWatch: false,
-      cardFontSize: 15,
-      custom: { baseUrl: '', apiKey: '', model: 'deepseek-chat', extraBody: '', prompt: '' }
-    }
-  );
-
-  await page.goto(`chrome-extension://${extId}/src/viewer.html?file=${encodeURIComponent(`http://127.0.0.1:${PORT}/sample.pdf`)}`, {
-    waitUntil: 'domcontentloaded'
-  });
-  await page.waitForSelector('.textLayer span', { timeout: 30000 });
-  await sleep(600);
-
+  await page.setViewport({ width: 1280, height: 900 });
+  await page.goto(`chrome-extension://${id}/src/options.html`);
+  await page.evaluate(async ({ cfg }) => chrome.runtime.sendMessage({ type: 'saveSettings', settings: {
+    engine: 'auto', targetLang: 'zh-CN', autoTranslate: true, sentenceMode: true, fastFirst: true,
+    ...(cfg ? { custom: cfg } : {})
+  } }), { cfg });
+  const pdf = `http://127.0.0.1:${server.address().port}/sample.pdf`;
+  await page.goto(`chrome-extension://${id}/src/viewer.html?file=${encodeURIComponent(pdf)}`);
+  await page.bringToFront();
+  await page.waitForSelector('.textLayer span');
   await page.evaluate(() => {
-    const spans = [...document.querySelectorAll('.textLayer span')];
-    const target = spans.find((s) => s.textContent.includes('quick brown fox'));
-    if (!target) throw new Error('sample text not found');
-    const node = target.firstChild;
-    const start = node.nodeValue.indexOf('fox');
-    const range = document.createRange();
-    range.setStart(node, start);
-    range.setEnd(node, start + 'fox jumps'.length);
-    const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+    window.measurement = { started: performance.now(), first: null, stream: null, finished: null, engine: null };
+    chrome.runtime.onMessage.addListener((m) => {
+      if (m?.type === 'translate-stream' && m.text && measurement.stream === null) measurement.stream = Math.round(performance.now() - measurement.started);
+      if (m?.type === 'translate-upgrade') { measurement.finished = Math.round(performance.now() - measurement.started); measurement.engine = m.engine; measurement.ok = m.ok; }
+    });
+    const out = document.getElementById('cardOut');
+    const observer = new MutationObserver(() => {
+      if (measurement.first === null && out.textContent && !out.classList.contains('loading')) measurement.first = Math.round(performance.now() - measurement.started);
+    });
+    observer.observe(out, { childList: true, characterData: true, subtree: true });
+    const span = [...document.querySelectorAll('.textLayer span')].find((s) => s.textContent.includes('quick brown fox'));
+    const i = span.textContent.indexOf('fox'); const range = document.createRange();
+    range.setStart(span.firstChild, i); range.setEnd(span.firstChild, i + 9);
+    getSelection().removeAllRanges(); getSelection().addRange(range);
     document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
   });
-
-  // 等到有稳定的译文（不是「翻译中…」）
-  await page
-    .waitForFunction(
-      () => {
-        const out = document.getElementById('cardOut');
-        const badge = document.getElementById('cardBadge');
-        if (!out || !badge) return false;
-        const text = out.textContent || '';
-        return text.length > 4 && !text.includes('正在请求') && !badge.textContent.includes('生成中');
-      },
-      { timeout: 25000 }
-    )
-    .catch(() => {});
-  // 再给「升级」一点时间（如果有自定义 API）
-  await sleep(3500);
-
-  const shown = await page.evaluate(() => ({
-    src: document.getElementById('cardSrc').textContent.trim(),
-    out: document.getElementById('cardOut').textContent.trim(),
-    badge: document.getElementById('cardBadge').textContent.trim()
-  }));
-
-  await page.screenshot({ path: path.join(docsDir, 'screenshot.png') });
-  console.log('原文:', shown.src);
-  console.log('译文:', shown.out);
-  console.log('引擎:', shown.badge);
-  console.log('已保存:', path.join(docsDir, 'screenshot.png'));
-} catch (err) {
-  console.error('失败:', err);
-  process.exitCode = 1;
+  await page.waitForFunction((expectCustom) => {
+    const badge = document.getElementById('cardBadge').textContent;
+    return !document.getElementById('card').hidden && !/生成中|优化中|翻译中/.test(badge) && (!expectCustom || badge.includes('自定义 API'));
+  }, { timeout: 45000 }, Boolean(cfg));
+  const result = await page.evaluate(() => ({ ...measurement, source: document.getElementById('cardSrc').textContent, translation: document.getElementById('cardOut').textContent, badge: document.getElementById('cardBadge').textContent }));
+  if (cfg && !result.badge.includes('自定义 API')) throw new Error('Configured custom API did not complete');
+  await screenshot(page, path.join(root, 'docs/screenshot.png'));
+  console.log(JSON.stringify({ browser: await browser.version(), realAPIConfigured: Boolean(cfg), ...result }, null, 2));
+  console.log('Saved docs/screenshot.png');
 } finally {
-  await browser.close().catch(() => {});
-  server.close();
+  if (harness) await harness.cleanup();
+  server.closeAllConnections(); await new Promise((r) => server.close(r));
 }

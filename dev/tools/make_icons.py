@@ -1,4 +1,4 @@
-"""生成扩展图标：圆角蓝色方块 + 白色「译」字。需要 Pillow。"""
+"""生成扩展图标：墨绿书签 + 白色「译」字。需要 Pillow。"""
 from PIL import Image, ImageDraw, ImageFont
 import os
 
@@ -29,13 +29,7 @@ def make_icon(size):
     w = size * scale
     img = Image.new("RGBA", (w, w), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    # 渐变背景
-    for y in range(w):
-        t = y / max(1, w - 1)
-        r = int(31 + (65 - 31) * t)
-        g = int(111 + (150 - 111) * t)
-        b = int(235 + (255 - 235) * t)
-        d.line([(0, y), (w, y)], fill=(r, g, b, 255))
+    d.rectangle([0, 0, w - 1, w - 1], fill=(36, 105, 91, 255))
     # 圆角遮罩
     mask = Image.new("L", (w, w), 0)
     ImageDraw.Draw(mask).rounded_rectangle([0, 0, w - 1, w - 1], radius=int(w * 0.22), fill=255)

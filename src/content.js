@@ -56,12 +56,15 @@
   (async () => {
     const res = await send({ type: 'getSettings' });
     if (res && res.ok && res.settings) settings = { ...settings, ...res.settings };
+    applyFontSize();
   })();
 
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes.settings && changes.settings.newValue) {
         settings = { ...settings, ...changes.settings.newValue };
+        applyFontSize();
+        hideCard();
       }
     });
   } catch (_) {}
@@ -80,22 +83,22 @@
       .pt-btn {
         position: fixed; display: none; align-items: center; justify-content: center;
         width: 30px; height: 30px; border-radius: 8px; cursor: pointer; user-select: none;
-        background: #1f6feb; color: #fff; font: 700 14px/1 system-ui, "Segoe UI", sans-serif;
+        background: #21665c; color: #fff; font: 700 14px/1 system-ui, "Segoe UI", sans-serif;
         box-shadow: 0 3px 10px rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.25);
       }
-      .pt-btn:hover { background: #2f81f7; }
+      .pt-btn:hover { background: #184e46; }
       .pt-card {
         position: fixed; display: none; width: min(440px, calc(100vw - 24px));
-        background: #ffffff; color: #1f2328; border: 1px solid #d0d7de; border-radius: 12px;
-        box-shadow: 0 10px 32px rgba(0,0,0,.22); font: 400 15px/1.6 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+        background: #ffffff; color: #1f2328; border: 1px solid #dce1da; border-radius: 16px;
+        box-shadow: 0 10px 32px rgba(0,0,0,.22); font: 400 15px/1.8 "Bahnschrift", "Microsoft YaHei UI", sans-serif;
         overflow: hidden;
       }
       .pt-head {
         display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-        background: #f6f8fa; border-bottom: 1px solid #e6e9ee; cursor: default;
+        background: #f6f7f3; border-bottom: 1px solid #e6e9ee; cursor: default;
       }
       .pt-badge {
-        font-size: 11px; font-weight: 700; color: #0a5ad6; background: #ddebff;
+        font-size: 11px; font-weight: 700; color: #21665c; background: #e8f2ee;
         padding: 2px 7px; border-radius: 999px; white-space: nowrap;
       }
       .pt-title { font-size: 12px; color: #57606a; flex: 1; }
@@ -105,7 +108,7 @@
       }
       .pt-act:hover { background: #e6e9ee; color: #1f2328; }
       .pt-body { padding: 10px 12px 12px; max-height: 45vh; overflow: auto; }
-      .pt-src { color: #6e7781; font-size: 12.5px; border-left: 3px solid #d0d7de; padding-left: 8px; margin-bottom: 8px; white-space: pre-wrap; }
+      .pt-src { color: #6e7781; font-size: 12.5px; border-left: 3px solid #dce1da; padding-left: 8px; margin-bottom: 8px; white-space: pre-wrap; }
       .pt-out { white-space: pre-wrap; }
       .pt-out.pt-loading { color: #6e7781; }
       .pt-out.pt-error { color: #c0392b; font-size: 13px; }
@@ -208,6 +211,8 @@
   }
 
   function hideCard() {
+    lastRequestId++;
+    currentRequestKey = '';
     card.style.display = 'none';
   }
 
@@ -251,7 +256,11 @@
     }
   }
 
-  const SENTENCE_END = /[。！？!?；;\n\r]|[.!?](?=\s|$)/;
+  function sentenceBoundary(text, i) {
+    if (/[。！？!?；;\n\r]/.test(text[i] || '')) return true;
+    if (text[i] !== '.' || (text[i + 1] && !/\s/.test(text[i + 1]))) return false;
+    return !/\b(?:Dr|Mr|Mrs|Ms|Prof|Fig|Eq|et al|vs)\.$/i.test(text.slice(0, i + 1));
+  }
   const MAX_EXPAND = 220;
 
   /** 把选区扩展到所在完整句子（基于 DOM Range，尽量少改动语义） */
@@ -266,7 +275,7 @@
     const endEl = currentNodeOf(range.endContainer);
     if (!startEl || !endEl) return null;
 
-    let block = startEl;
+    let block = closestOf(startEl, 'p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, div') || startEl;
     while (
       block &&
       block.parentElement &&
@@ -297,31 +306,17 @@
 
     if (full.length > 4000) return null;
 
-    let from = selStart;
-    let to = selEnd;
+    let from = Math.max(0, selStart - MAX_EXPAND);
+    let to = Math.min(full.length, selEnd + MAX_EXPAND);
 
-    // 向前找句首
-    const before = full.slice(Math.max(0, from - MAX_EXPAND), from);
-    let cut = -1;
-    for (let i = before.length - 1; i >= 0; i--) {
-      if (SENTENCE_END.test(before[i])) {
-        cut = i;
-        break;
-      }
+    for (let i = selStart - 1; i >= from; i--) {
+      if (sentenceBoundary(full, i)) { from = i + 1; break; }
     }
-    if (cut >= 0) from = Math.max(0, from - MAX_EXPAND) + cut + 1;
-
-    // 向后找句尾
-    const afterStart = to;
-    const after = full.slice(afterStart, afterStart + MAX_EXPAND);
-    let endCut = -1;
-    for (let i = 0; i < after.length; i++) {
-      if (SENTENCE_END.test(after[i])) {
-        endCut = i;
-        break;
+    if (!sentenceBoundary(full, selEnd - 1)) {
+      for (let i = selEnd; i < to; i++) {
+        if (sentenceBoundary(full, i)) { to = i + 1; break; }
       }
-    }
-    if (endCut >= 0) to = afterStart + endCut + 1;
+    } else { to = selEnd; }
 
     while (from < to && /\s/.test(full[from])) from++;
     while (to > from && /\s/.test(full[to - 1])) to--;
@@ -373,6 +368,9 @@
   let lastRequestId = 0;
   /** 当前这次翻译的请求标识：用于识别「升级」消息是不是属于它 */
   let currentRequestKey = '';
+  let streamed = false;
+  let provisionalResult = null;
+  let upgradeResult = null;
 
   async function translateText(text, rect) {
     const payload = cleanText(text);
@@ -383,6 +381,9 @@
     const requestId = ++lastRequestId;
     const requestKey = `r${requestId}-${Date.now()}`;
     currentRequestKey = requestKey;
+    streamed = false;
+    provisionalResult = null;
+    upgradeResult = null;
     badge.textContent = '翻译中…';
     srcEl.textContent = payload.length > 400 ? `${payload.slice(0, 400)}…` : payload;
     outEl.dataset.copy = '';
@@ -399,6 +400,9 @@
       requestId: requestKey
     });
     if (requestId !== lastRequestId) return;
+    if (res?.provisional) provisionalResult = res;
+    if (upgradeResult) { applyUpgrade(upgradeResult); return; }
+    if (res?.provisional && streamed) return;
 
     if (res && res.ok) {
       const time = res.elapsedMs ? ` · ${(res.elapsedMs / 1000).toFixed(1)}s` : '';
@@ -422,6 +426,7 @@
   /** 自定义 API 的升级结果到了：替换卡片内容（只认当前这次请求） */
   function applyUpgrade(msg) {
     if (!msg || msg.requestId !== currentRequestKey) return;
+    upgradeResult = msg;
     if (msg.ok) {
       badge.textContent = msg.engineLabel
         ? `${msg.engineLabel}${msg.elapsedMs ? ` · ${(msg.elapsedMs / 1000).toFixed(1)}s` : ''}`
@@ -431,7 +436,12 @@
       outEl.dataset.copy = msg.translation;
       outEl.dataset.provisional = '';
     } else {
-      // 升级失败就保留免费引擎的结果，只在角标里说明一下
+      if (provisionalResult) {
+        outEl.textContent = provisionalResult.translation;
+        outEl.dataset.copy = provisionalResult.translation;
+        badge.textContent = provisionalResult.engineLabel;
+      }
+      // Keep the complete free translation if an AI stream fails.
       badge.textContent = `${badge.textContent.replace(/ · AI 优化中…$/, '')} · 优化失败`;
     }
   }
@@ -444,6 +454,7 @@
       return;
     }
     if (typeof msg.text !== 'string' || !msg.text) return;
+    streamed = true;
     outEl.className = 'pt-out';
     outEl.textContent = msg.text;
     outEl.dataset.copy = msg.text;
@@ -463,7 +474,7 @@
 
   function handleMouseUp(event) {
     if (IS_PDF) return;
-    if (closestOf(event.target, `#${HOST_ID}`)) return;
+    if (closestOf(event.target, `#${HOST_ID}`) || closestOf(event.target, 'input, textarea, [contenteditable="true"]')) return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) {
       hideButton();
@@ -550,7 +561,7 @@
 
   const PDF_HINT =
     '内置 PDF 阅读器不把选区暴露给扩展：请先用 Ctrl+C 复制选中文字再按快捷键，' +
-    '或按 Alt+Shift+X 用本扩展自己的阅读器打开该 PDF —— 在那里才是真正的「选中即翻译」。';
+    '或按 Alt+X 用本扩展自己的阅读器打开该 PDF —— 在那里才是真正的「选中即翻译」。';
 
   async function translateSelectionExternal(msg) {
     if (IS_PDF) {

@@ -25,6 +25,8 @@ const els = {
 };
 
 let currentTab = null;
+let currentFileUrl = '';
+let clipSequence = 0;
 
 function sendMsg(message) {
   return new Promise((resolve) => {
@@ -72,19 +74,22 @@ async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTab = tab || null;
   const url = tab && tab.url ? tab.url : '';
-  let isPdf = looksLikePdf(url);
+  const isReader = url.startsWith(chrome.runtime.getURL('src/viewer.html'));
+  currentFileUrl = isReader ? new URL(url).searchParams.get('file') || '' : url;
+  let isPdf = looksLikePdf(url) && !isReader;
   if (!isPdf && tab && tab.id != null && /^https?:|^file:/.test(url)) {
     isPdf = await detectPdfByContentType(tab.id);
   }
 
-  els.tabInfo.textContent = url ? url.replace(/^https?:\/\//, '').slice(0, 60) : '未知页面';
+  els.openAnyWay.closest('details').hidden = isReader || !/^https?:|^file:/.test(url);
+  els.tabInfo.textContent = isReader ? '翻译阅读器已打开' : url.startsWith(chrome.runtime.getURL('')) ? 'PDF 划词翻译' : (tab?.title || url.replace(/^https?:\/\//, '') || '未知页面');
   els.tabInfo.title = url;
   els.pdfBlock.hidden = !isPdf;
   els.notPdfBlock.hidden = isPdf;
   if (!isPdf) {
-    els.notPdfHint.textContent = url.startsWith('chrome')
-      ? '这是浏览器内部页面，无法注入翻译。'
-      : '当前页面不是 PDF。你仍然可以在任意网页上划词翻译。';
+    els.notPdfHint.textContent = isReader ? '阅读器已就绪。在 PDF 中选中句子即可翻译。' : /^(chrome|edge|about):/.test(url)
+      ? '此页面不支持划词。可打开本地 PDF，或切换到普通网页。'
+      : '在网页上选中文字即可翻译；也可以打开一份 PDF 开始阅读。';
   }
 
   try {
@@ -95,7 +100,7 @@ async function init() {
         .map((c) => `${c.name === 'translate-selection' ? '翻译选区' : '阅读器打开'} ${c.shortcut || '（未设置）'}`)
         .join('；') || '未设置';
   } catch (_) {
-    els.shortcuts.textContent = 'Alt+Shift+Z';
+    els.shortcuts.textContent = '请在扩展设置中查看快捷键';
   }
 }
 
@@ -112,9 +117,9 @@ function openViewer(fileUrl, newTab) {
   window.close();
 }
 
-els.openCurrent.addEventListener('click', () => openViewer(currentTab && currentTab.url, false));
-els.openCurrentNew.addEventListener('click', () => openViewer(currentTab && currentTab.url, true));
-els.openAnyWay.addEventListener('click', () => openViewer(currentTab && currentTab.url, true));
+els.openCurrent.addEventListener('click', () => openViewer(currentFileUrl, false));
+els.openCurrentNew.addEventListener('click', () => openViewer(currentFileUrl, true));
+els.openAnyWay.addEventListener('click', () => openViewer(currentFileUrl, true));
 els.openLocal.addEventListener('click', () => openViewer('', true));
 els.openOptions.addEventListener('click', () => {
   chrome.runtime.openOptionsPage();
@@ -145,13 +150,14 @@ function showClipResult(html, isError) {
 }
 
 els.translateClip.addEventListener('click', async () => {
+  const sequence = ++clipSequence;
   els.copyClipResult.hidden = true;
   clipTranslation = '';
   let text = '';
   try {
     text = (await navigator.clipboard.readText()).replace(/\s+/g, ' ').trim();
   } catch (err) {
-    showClipResult(`读取剪贴板失败：${(err && err.message) || err}<br />请确认已授予剪贴板权限。`, true);
+    showClipResult(`读取剪贴板失败：${escapeHtml((err && err.message) || err)}<br />请确认已授予剪贴板权限。`, true);
     return;
   }
   if (!text) {
@@ -167,6 +173,7 @@ els.translateClip.addEventListener('click', async () => {
     // 弹窗不是标签页，收不到异步的「升级」消息 → 直接等最终结果
     quality: true
   });
+  if (sequence !== clipSequence) return;
   if (res && res.ok) {
     clipTranslation = res.translation;
     const time = res.elapsedMs ? ` · ${(res.elapsedMs / 1000).toFixed(1)}s` : '';

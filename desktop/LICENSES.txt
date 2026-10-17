@@ -1,0 +1,8 @@
+Paper Translator desktop runtime
+
+Application code: MIT; see LICENSE in this package.
+Electron: MIT; bundled Electron license and Chromium notices are alongside the executable.
+pdf.js: Apache-2.0; see https://github.com/mozilla/pdf.js/blob/master/LICENSE
+NSIS installer: zlib/libpng; https://nsis.sourceforge.io/License
+
+The application does not bundle API credentials, articles, test documents, or model weights.

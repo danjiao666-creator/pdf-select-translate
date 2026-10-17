@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "PDF 划词翻译 · Select & Translate",
-  "version": "1.0.3",
-  "description": "选中即翻译：自带 PDF 阅读器（本地 pdf.js）划词/整句即时翻译；同时支持 Chrome/Edge 内置 PDF 阅读器与普通网页划词翻译。",
+  "version": "1.3.0",
+  "description": "本地文献阅读与翻译：全文对照、文章 AI 对话、目录搜索、书签笔记、文档库与备份；支持 PDF 和网页划词翻译。",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
@@ -53,7 +53,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/viewer.html", "src/viewer.js", "src/viewer.css", "vendor/*"],
+      "resources": ["src/viewer.html", "src/viewer.js", "src/viewer.css", "src/ui.css", "src/appearance.js", "src/desktop-platform.js", "src/library.mjs", "src/library-backup.mjs", "src/pdf-layout.mjs", "src/pdf-export.mjs", "src/document-tools.mjs", "src/reader-tools.mjs", "src/reader-tools.css", "src/article-chat.mjs", "src/article-chat.css", "src/chat-context.mjs", "vendor/*"],
       "matches": ["<all_urls>"]
     }
   ],
