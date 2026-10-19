@@ -2,6 +2,17 @@
 
 本地 PDF 阅读、划词翻译、全文翻译和文章 AI 讨论。提供 Windows 应用与 Chrome / Edge 扩展，两者共用阅读器与翻译逻辑，数据分别保存，可通过文档库备份迁移。
 
+## 下载安装
+
+**另一台 Windows 64 位电脑，直接下载安装包即可，不需要开发环境。**
+
+- [Windows 安装包 1.3.0](https://github.com/danjiao666-creator/pdf-select-translate/releases/download/v1.3.0/PaperTranslator-Setup-1.3.0-x64.exe)
+- [Windows 免安装包 1.3.0](https://github.com/danjiao666-creator/pdf-select-translate/releases/download/v1.3.0/PaperTranslator-Portable-1.3.0-x64.zip)
+- [Chrome / Edge 插件 1.3.0](https://github.com/danjiao666-creator/pdf-select-translate/releases/download/v1.3.0/pdf-translate-extension-1.3.0.zip)
+- [完整下载页、使用说明与 SHA-256](https://github.com/danjiao666-creator/pdf-select-translate/releases/tag/v1.3.0)
+
+请选择 Releases 中的安装包或免安装包，不要把 GitHub 的「Source code」当成安装包。应用未签名，可能提示未知发布者；请核对来源和校验值，不要关闭安全软件。AI 功能需自行配置有效 API Key；已有文档与记录可通过文档库备份迁移，不会自动跨电脑同步。
+
 ## 当前状态
 
 - 1.3 增加独立 Windows 应用、文章对话、目录、全文查找、书签、逐页笔记、备份恢复，以及跟随系统 / 浅色 / 深色主题。
